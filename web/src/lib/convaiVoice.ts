@@ -18,7 +18,13 @@ let lastStartError: string | null = null;
 let lastConvaiError: string | null = null;
 let lastStartAttemptMs = 0;
 let reconnectBackoffMs = 3000;
+let sessionEpoch = 0;
+let pendingErrorTimer: ReturnType<typeof setTimeout> | null = null;
 const USER_START_REASONS = new Set(["armMic", "console-force", "voice-toggle", "settings"]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function formatConvaiError(message: unknown): string {
   if (typeof message === "string") return message;
@@ -108,9 +114,14 @@ async function pinConvaiOutput(conv: Conversation, sinkId: string): Promise<void
   }
 }
 
-function buildSessionCallbacks(sinkId: string) {
+function buildSessionCallbacks(sinkId: string, epoch: number) {
   return {
     onConnect: ({ conversationId }: { conversationId: string }) => {
+      if (epoch !== sessionEpoch) return;
+      if (pendingErrorTimer) {
+        clearTimeout(pendingErrorTimer);
+        pendingErrorTimer = null;
+      }
       console.log("[ConvAI] connected", conversationId, "via", lastConnectionType);
       reportConvaiClient({
         event: "connected",
@@ -120,9 +131,12 @@ function buildSessionCallbacks(sinkId: string) {
         outputDeviceId: lastOutputDeviceId,
       });
       useStore.getState().setConvaiConnected(true);
+      useStore.getState().setWakeEnabled(true);
       useStore.getState().setMicEnabled(true);
       useStore.getState().setMicMode("armed");
+      useStore.getState().setOrb("listening");
       useStore.getState().setMicStatus(`Nexy connected (${lastConnectionType}) — Xbox`);
+      lastConvaiError = null;
       useStore.getState().setVoiceProfile({
         name: "ElevenLabs ConvAI · Irish Flash",
         lang: "en-IE",
@@ -132,21 +146,30 @@ function buildSessionCallbacks(sinkId: string) {
       if (session) void pinConvaiOutput(session, sinkId);
     },
     onDisconnect: () => {
+      if (epoch !== sessionEpoch) return;
       session = null;
       useStore.getState().setConvaiConnected(false);
-      useStore.getState().setMicMode("dormant");
+      useStore.getState().setMicEnabled(true);
+      useStore.getState().setMicMode("armed");
       useStore.getState().setMicStatus("Nexy voice reconnecting…");
       scheduleReconnect("disconnect");
     },
     onError: (message: unknown) => {
+      if (epoch !== sessionEpoch) return;
       const err = formatConvaiError(message);
       lastConvaiError = err;
       console.error("[ConvAI] error", message);
       reportConvaiClient({ event: "error", error: err, raw: message });
-      useStore.getState().setMicStatus(`ConvAI error: ${err.slice(0, 120)}`);
       reconnectBackoffMs = Math.min(reconnectBackoffMs * 2, 30_000);
+      if (pendingErrorTimer) clearTimeout(pendingErrorTimer);
+      pendingErrorTimer = setTimeout(() => {
+        pendingErrorTimer = null;
+        if (epoch !== sessionEpoch || useStore.getState().convaiConnected) return;
+        useStore.getState().setMicStatus(`ConvAI error: ${err.slice(0, 120)}`);
+      }, 2800);
     },
     onModeChange: ({ mode }: { mode: string }) => {
+      if (epoch !== sessionEpoch) return;
       if (mode === "speaking") {
         sawAgentSpeaking = true;
         reportConvaiClient({ event: "speaking", connectionType: lastConnectionType });
@@ -184,11 +207,8 @@ async function openConvaiSession(
   xbox: { micId: string; sinkId?: string; micLabel?: string; sinkLabel?: string },
   opts?: { reason?: string },
 ): Promise<Conversation> {
+  // Agent firstMessage/language live on server — overrides here caused ElevenLabs "Server error: Unknown error".
   const overrides = {
-    agent: {
-      firstMessage: "Nexy online on your Xbox headset. Ryan, can you hear me?",
-      language: "en" as const,
-    },
     tts: { voiceId: status.voice_id || IRISH_VOICE_ID },
   };
   const sessionOpts: {
@@ -199,7 +219,8 @@ async function openConvaiSession(
   if (xbox.sinkId && xbox.sinkId !== "default" && xbox.sinkId !== "communications") {
     sessionOpts.outputDeviceId = xbox.sinkId;
   }
-  const callbacks = buildSessionCallbacks(sessionOpts.outputDeviceId || xbox.sinkId || "");
+  const epoch = sessionEpoch;
+  const callbacks = buildSessionCallbacks(sessionOpts.outputDeviceId || xbox.sinkId || "", epoch);
 
   const tokenResp = await fetch("/api/convai/conversation-token");
   if (!tokenResp.ok) {
@@ -305,8 +326,10 @@ export async function startConvaiVoice(opts?: { reason?: string }): Promise<bool
       /* noop */
     }
     session = null;
+    await sleep(450);
   }
 
+  sessionEpoch += 1;
   lastStartAttemptMs = Date.now();
   starting = true;
   useStore.getState().setMicStatus("Nexy ConvAI connecting…");
@@ -327,6 +350,7 @@ export async function startConvaiVoice(opts?: { reason?: string }): Promise<bool
       return false;
     }
 
+    await sleep(500);
     if (xbox.sinkId) await unlockConvaiPlayback(xbox.sinkId);
     session = await openConvaiSession(status, {
       micId: xbox.micId,
@@ -352,9 +376,14 @@ export async function startConvaiVoice(opts?: { reason?: string }): Promise<bool
 }
 
 export async function stopConvaiVoice(): Promise<void> {
+  sessionEpoch += 1;
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
+  }
+  if (pendingErrorTimer) {
+    clearTimeout(pendingErrorTimer);
+    pendingErrorTimer = null;
   }
   const s = session;
   session = null;

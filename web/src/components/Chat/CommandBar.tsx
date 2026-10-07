@@ -13,6 +13,10 @@ export default function CommandBar() {
   const pushChat = useStore((s) => s.pushChat);
   const micEnabled = useStore((s) => s.micEnabled);
   const micMode = useStore((s) => s.micMode);
+  const convaiConnected = useStore((s) => s.convaiConnected);
+  const micLive = micEnabled || convaiConnected;
+  const micUiMode =
+    convaiConnected && micMode === "dormant" ? "armed" : micMode;
   const wakeEnabled = useStore((s) => s.wakeEnabled);
   const setWakeEnabled = useStore((s) => s.setWakeEnabled);
   const micStatus = useStore((s) => s.micStatus);
@@ -159,18 +163,18 @@ export default function CommandBar() {
         {/* Mic */}
         <button
           onClick={toggleMic}
-          title={micEnabled ? `mic ${micMode}` : "Start listening"}
+          title={micLive ? `mic ${micUiMode}${convaiConnected ? " · ConvAI" : ""}` : "Start listening"}
           className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-all shrink-0 ${
-            !micEnabled
+            !micLive
               ? "border-jarvis-cyan/15 text-jarvis-ice/60 hover:text-jarvis-ice hover:border-jarvis-cyan/45 hover:bg-jarvis-cyan/10"
-              : micMode === "armed"
+              : micUiMode === "armed"
                 ? "border-jarvis-aqua/70 text-jarvis-aqua bg-jarvis-aqua/15 animate-pulse_glow"
-                : micMode === "speaking"
+                : micUiMode === "speaking"
                   ? "border-jarvis-warn/70 text-jarvis-warn bg-jarvis-warn/10"
                   : "border-jarvis-cyan/60 text-jarvis-cyan bg-jarvis-cyan/10"
           }`}
         >
-          <MicIcon active={micEnabled} />
+          <MicIcon active={micLive} />
         </button>
 
         {/* Speaker */}

@@ -284,7 +284,10 @@ export async function resolveConvaiXboxDevices(): Promise<XboxAudioDevices> {
   if (micId && sinkId && isConcreteDeviceId(micId) && isConcreteDeviceId(sinkId)) {
     saveXboxAudioCache(micId, sinkId);
   }
-  useStore.getState().setMicStatus(`ConvAI Xbox: ${sink?.label || "?"} / ${liveLabel}`);
+  const st = useStore.getState();
+  if (!st.convaiConnected && !st.micStatus.startsWith("Nexy connected")) {
+    st.setMicStatus(`ConvAI Xbox: ${sink?.label || "?"} / ${liveLabel}`);
+  }
   return lastXboxAudio;
 }
 
