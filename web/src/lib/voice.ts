@@ -217,62 +217,75 @@ export function getActiveXboxAudio(): XboxAudioDevices {
 
 export { ensureXboxDevicesResolved };
 
-/** ConvAI/WebRTC setSinkId fails on pseudo ids — require concrete Xbox endpoint ids. */
+/** ConvAI needs a real mic deviceId from an open Xbox track; sink may use concrete id or OS default. */
 export async function resolveConvaiXboxDevices(): Promise<XboxAudioDevices> {
   await grantXboxMicPermissionForLabels();
-  let x = await ensureXboxDevicesResolved();
-  if (!navigator.mediaDevices?.enumerateDevices) return x;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    lastXboxAudio = { ok: false, refused: ["getUserMedia unavailable"] };
+    return lastXboxAudio;
+  }
+
+  const baseAudio: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+  const cache = loadXboxAudioCache();
+  let stream: MediaStream;
+  try {
+    if (cache.micId && isConcreteDeviceId(cache.micId)) {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { ...baseAudio, deviceId: { exact: cache.micId } },
+      });
+    } else {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: baseAudio });
+    }
+  } catch (e) {
+    lastXboxAudio = { ok: false, refused: [String(e)] };
+    useStore.getState().setMicStatus("Xbox mic permission denied for ConvAI");
+    return lastXboxAudio;
+  }
+
+  const track = stream.getAudioTracks()[0];
+  const liveLabel = track?.label || "";
+  if (!trackLabelIsXboxMic(liveLabel)) {
+    stream.getTracks().forEach((t) => t.stop());
+    lastXboxAudio = { ok: false, refused: [liveLabel || "non-xbox mic"] };
+    useStore.getState().setMicStatus("Refused non-Xbox mic for ConvAI");
+    return lastXboxAudio;
+  }
+
+  const micId = track.getSettings().deviceId || track.id;
+  stream.getTracks().forEach((t) => t.stop());
 
   const devices = await navigator.mediaDevices.enumerateDevices();
-  const needConcrete = (id?: string) => !id || PSEUDO_DEVICE_IDS.has(id);
+  const sink =
+    devices.find(
+      (d) =>
+        d.kind === "audiooutput" &&
+        deviceAllowed(d) &&
+        /headphones\s*\(\s*xbox\s*controller\s*\)/i.test(d.label) &&
+        isConcreteDeviceId(d.deviceId),
+    ) ||
+    devices.find(
+      (d) => d.kind === "audiooutput" && deviceAllowed(d) && XBOX_PLAY_RE.test(d.label) && isConcreteDeviceId(d.deviceId),
+    ) ||
+    devices.find((d) => d.kind === "audiooutput" && deviceAllowed(d) && XBOX_PLAY_RE.test(d.label));
 
-  if (needConcrete(x.sinkId)) {
-    const sink =
-      devices.find(
-        (d) =>
-          d.kind === "audiooutput" &&
-          deviceAllowed(d) &&
-          /headphones\s*\(\s*xbox\s*controller\s*\)/i.test(d.label) &&
-          isConcreteDeviceId(d.deviceId),
-      ) ||
-      devices.find(
-        (d) =>
-          d.kind === "audiooutput" &&
-          deviceAllowed(d) &&
-          XBOX_PLAY_RE.test(d.label) &&
-          isConcreteDeviceId(d.deviceId),
-      );
-    if (sink) {
-      x = { ...x, sinkId: sink.deviceId, sinkLabel: sink.label, ok: Boolean(x.micId && sink.deviceId) };
-      saveXboxAudioCache(x.micId, sink.deviceId);
-    }
+  const sinkId = sink?.deviceId;
+  const ok = Boolean(micId && sinkId);
+  lastXboxAudio = {
+    micId,
+    sinkId,
+    micLabel: liveLabel,
+    sinkLabel: sink?.label,
+    ok,
+  };
+  if (micId && sinkId && isConcreteDeviceId(micId) && isConcreteDeviceId(sinkId)) {
+    saveXboxAudioCache(micId, sinkId);
   }
-
-  if (needConcrete(x.micId)) {
-    const mic =
-      devices.find(
-        (d) =>
-          d.kind === "audioinput" &&
-          deviceAllowed(d) &&
-          /headset\s*microphone\s*\(\s*xbox\s*controller\s*\)/i.test(d.label) &&
-          isConcreteDeviceId(d.deviceId),
-      ) ||
-      devices.find(
-        (d) => d.kind === "audioinput" && deviceAllowed(d) && XBOX_MIC_RE.test(d.label) && isConcreteDeviceId(d.deviceId),
-      );
-    if (mic) {
-      x = { ...x, micId: mic.deviceId, micLabel: mic.label, ok: Boolean(mic.deviceId && x.sinkId) };
-      saveXboxAudioCache(mic.deviceId, x.sinkId);
-    }
-  }
-
-  lastXboxAudio = x;
-  if (x.ok && x.sinkId && x.micId && !needConcrete(x.sinkId) && !needConcrete(x.micId)) {
-    useStore.getState().setMicStatus(`ConvAI Xbox: ${x.sinkLabel} / ${x.micLabel}`);
-  } else if (!x.sinkId || !x.micId) {
-    useStore.getState().setMicStatus("Xbox concrete device ids missing for ConvAI");
-  }
-  return x;
+  useStore.getState().setMicStatus(`ConvAI Xbox: ${sink?.label || "?"} / ${liveLabel}`);
+  return lastXboxAudio;
 }
 
 /** Public filtered device list — Xbox only. Never surfaces blocked devices. */
@@ -486,10 +499,6 @@ async function speakWithServerTts(clean: string): Promise<boolean> {
 }
 
 export function speak(text: string): void {
-  if (useStore.getState().voicePipeline === "convai") {
-    console.log("[TTS] legacy speak skipped (ConvAI active)");
-    return;
-  }
   // Route ALL one-shot announcements through the streaming queue + single
   // shared HTMLAudioElement. The old path created a second Audio() via
   // speakWithServerTts and fell back to browser SpeechSynthesis (robot voice),
@@ -511,9 +520,6 @@ export function speak(text: string): void {
 // for synthesis. On `isFinal`, flushes any trailing fragment too.
 // Audio segments play strictly in order; later segments wait their turn.
 export function streamSpeak(id: string, fullText: string, isFinal: boolean): void {
-  if (useStore.getState().voicePipeline === "convai") {
-    return;
-  }
   if (!useStore.getState().voiceEnabled) {
     console.log("[TTS:stream] voice disabled, skip");
     return;

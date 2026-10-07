@@ -21,6 +21,8 @@ export interface ChatEntry {
   ts: number;
   streaming?: boolean;    // true while tokens still arriving
   attachments?: ChatAttachment[];
+  /** convai = spoken by ElevenLabs duplex; hud = WS/orchestrator (use /api/tts on Xbox). */
+  ttsSource?: "convai" | "hud";
 }
 
 export interface ToolCall {

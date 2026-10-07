@@ -40,7 +40,16 @@ MEDIA_PREFIX = "__JARVIS_MEDIA__"
 
 log = logging.getLogger("jarvis.orchestrator")
 
-MAX_TOOL_HOPS = 10
+MAX_TOOL_HOPS = 40
+
+
+def _spoken_tool_ack(tool_calls: list[ToolCall]) -> str:
+    names = [(tc.name or "").replace("_", " ") for tc in tool_calls if (tc.name or "").strip()][:3]
+    if not names:
+        return "Understood, sir. Working on that now."
+    if len(names) == 1:
+        return f"On it, sir. {names[0]}."
+    return f"Right away, sir. {', '.join(names)}."
 
 # Phrases that indicate the model is *promising* an action without doing it.
 # When matched in a text-only assistant reply (no tool calls in the same hop),
@@ -57,6 +66,8 @@ PROMISE_RE = re.compile(
     re.IGNORECASE,
 )
 PROMISE_FOLLOWUP_LIMIT = 1   # at most one auto-nudge per user turn
+IDENTICAL_TOOL_LIMIT = 2     # same tool+args this many times → refuse + force new approach
+STOP_RE = re.compile(r"^\s*(stop|halt|cancel|enough|quit|stand\s+down)\s*[.!~]*\s*$", re.IGNORECASE)
 
 
 # Tools whose work is too expensive to throw away when a new chat arrives.
@@ -103,6 +114,9 @@ class Orchestrator:
         # in-flight task. Heavy tools (image_generate, image_to_3d,
         # text_to_3d) protect their work via UNINTERRUPTIBLE_TOOLS below.
         self.busy_tool: str | None = None
+        # Consecutive identical tool signatures in this turn (name+args).
+        # Used to break model retry thrash on mangled Windows shell cmds.
+        self._recent_tool_sigs: list[str] = []
 
         # Default emit-hook: lift tool results carrying a __JARVIS_MEDIA__
         # JSON payload into a proper MEDIA event. This is what makes
@@ -495,6 +509,7 @@ class Orchestrator:
         hop = 0
         promise_followups = 0
         reflections = 0
+        self._recent_tool_sigs = []
         while hop < MAX_TOOL_HOPS:
             hop += 1
             yield Event(EventKind.THINKING, text="thinking...")
@@ -576,6 +591,8 @@ class Orchestrator:
                     yield Event(EventKind.STREAM_END)
 
             assistant_text = clean_assistant_text(reply.text)
+            reply.tool_calls = [tc for tc in reply.tool_calls if (tc.name or "").strip()]
+
             if not reply.tool_calls and is_malformed_reply(assistant_text, user_text):
                 reply, assistant_text = await self._repair_malformed_reply(
                     messages=messages,
@@ -591,6 +608,7 @@ class Orchestrator:
                 if (
                     promise_followups < PROMISE_FOLLOWUP_LIMIT
                     and PROMISE_RE.search(assistant_text)
+                    and not STOP_RE.match(user_text or "")
                 ):
                     promise_followups += 1
                     self._history.append({"role": "assistant", "content": reply.raw or assistant_text})
@@ -639,6 +657,14 @@ class Orchestrator:
                     yield Event(EventKind.SUGGESTIONS, payload={"items": chips})
                 yield Event(EventKind.DONE)
                 return
+
+            if reply.tool_calls:
+                if not assistant_text:
+                    assistant_text = _spoken_tool_ack(reply.tool_calls)
+                streamed_body = stream_began and bool(clean_assistant_text(reply.text))
+                if assistant_text and not streamed_body:
+                    self.memory.append_message("assistant", assistant_text)
+                    yield Event(EventKind.ASSISTANT, text=assistant_text)
 
             # Native tool calls: append assistant turn with proper tool_calls
             # array so the next round can match tool_call_id → tool result.
@@ -812,6 +838,60 @@ class Orchestrator:
                 }
             )
             return
+
+        # Identical tool call breaker: models (esp. on Windows) sometimes
+        # re-issue the exact same shell/search call when quoting mangled the
+        # result. Re-running forever looks like "shell thrash" in the UI.
+        try:
+            sig = f"{tool.name}|{json.dumps(tc.args, sort_keys=True, default=str)}"
+        except Exception:
+            sig = f"{tool.name}|{preview}"
+        recent = getattr(self, "_recent_tool_sigs", None)
+        if recent is None:
+            self._recent_tool_sigs = []
+            recent = self._recent_tool_sigs
+        identical_streak = 0
+        for prev in reversed(recent):
+            if prev == sig:
+                identical_streak += 1
+            else:
+                break
+        if identical_streak >= IDENTICAL_TOOL_LIMIT:
+            msg = (
+                f"Refused: identical tool call repeated {identical_streak} times "
+                f"({tool.name}). Do NOT re-run the same command/args. Change "
+                f"approach — on Windows prefer run_powershell for complex "
+                f"quoting, drop --jq filters, or use a simpler command."
+            )
+            log.warning("identical tool breaker: %s", sig[:200])
+            self.actions.record(
+                "refused_identical", tool=tool.name, args=tc.args, preview=preview
+            )
+            yield Event(
+                EventKind.TOOL_RESULT,
+                text=msg,
+                payload={"tool": tool.name, "ok": False, "identical": True},
+            )
+            if tc.call_id:
+                self._history.append({
+                    "role": "tool",
+                    "tool_call_id": tc.call_id,
+                    "name": tool.name,
+                    "content": msg,
+                })
+            else:
+                self._history.append({
+                    "role": "user",
+                    "content": (
+                        f"<tool_result name=\"{tool.name}\" ok=\"false\">"
+                        f"{msg}</tool_result>"
+                    ),
+                })
+            return
+        recent.append(sig)
+        # Cap memory so a long turn can't grow unbounded.
+        if len(recent) > 40:
+            del recent[:-40]
 
         yield Event(EventKind.TASK_START, text=f"{tool.name}: {preview}")
         t0 = time.perf_counter()

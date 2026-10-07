@@ -274,9 +274,11 @@ export default function App() {
     let lastId = "";
     let lastFingerprint = "";
     return useStore.subscribe((state) => {
-      if (state.voicePipeline === "convai") return;
+      if (!state.voiceEnabled) return;
       const last = state.chat[state.chat.length - 1];
       if (!last || last.role !== "assistant") return;
+      // ConvAI agent speaks via duplex; HUD/orchestrator replies still use /api/tts.
+      if (state.voicePipeline === "convai" && last.ttsSource === "convai") return;
       if (last.id !== lastId) {
         lastId = last.id;
         lastLen = 0;
@@ -291,8 +293,10 @@ export default function App() {
       if (fingerprint === lastFingerprint) return;
       if (grew || !last.streaming) {
         lastFingerprint = fingerprint;
-        console.log("[App:TTS] streamSpeak id=%s len=%d grew=%s isFinal=%s streaming=%s", last.id, last.text.length, grew, !last.streaming, last.streaming);
-        streamSpeak(last.id, last.text, !last.streaming);
+        const speakText = last.text.trim() || (last.ttsSource === "hud" ? "Understood, sir." : "");
+        if (!speakText) return;
+        console.log("[App:TTS] streamSpeak id=%s len=%d grew=%s isFinal=%s streaming=%s", last.id, speakText.length, grew, !last.streaming, last.streaming);
+        streamSpeak(last.id, speakText, !last.streaming);
       }
     });
   }, []);

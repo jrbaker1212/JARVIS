@@ -14,6 +14,7 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let lastConnectionType: "webrtc" | "websocket" | null = null;
 let sawAgentSpeaking = false;
 let lastOutputDeviceId: string | null = null;
+let lastStartError: string | null = null;
 
 /** Prime Chromium/Electron playback + pin sink before ElevenLabs opens AudioContext. */
 async function unlockConvaiPlayback(sinkId: string): Promise<void> {
@@ -65,6 +66,14 @@ function scheduleReconnect(reason: string) {
 
 type ConvaiStatus = { ready?: boolean; enabled?: boolean; voice_id?: string };
 
+function reportConvaiClient(event: Record<string, unknown>): void {
+  void fetch("/api/convai/client-report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+  }).catch(() => undefined);
+}
+
 async function pinConvaiOutput(conv: Conversation, sinkId: string): Promise<void> {
   lastOutputDeviceId = sinkId;
   const voiceConv = conv as Conversation & {
@@ -84,6 +93,13 @@ function buildSessionCallbacks(sinkId: string) {
   return {
     onConnect: ({ conversationId }: { conversationId: string }) => {
       console.log("[ConvAI] connected", conversationId, "via", lastConnectionType);
+      reportConvaiClient({
+        event: "connected",
+        conversationId,
+        connectionType: lastConnectionType,
+        micStatus: useStore.getState().micStatus,
+        outputDeviceId: lastOutputDeviceId,
+      });
       useStore.getState().setConvaiConnected(true);
       useStore.getState().setMicEnabled(true);
       useStore.getState().setMicMode("armed");
@@ -109,6 +125,7 @@ function buildSessionCallbacks(sinkId: string) {
     onModeChange: ({ mode }: { mode: string }) => {
       if (mode === "speaking") {
         sawAgentSpeaking = true;
+        reportConvaiClient({ event: "speaking", connectionType: lastConnectionType });
         useStore.getState().setOrb("speaking");
         useStore.getState().setMicMode("speaking");
         useStore.getState().setMicStatus("Nexy speaking (ConvAI)…");
@@ -129,6 +146,7 @@ function buildSessionCallbacks(sinkId: string) {
         role: role === "user" ? "user" : "assistant",
         text: trimmed,
         ts: Date.now(),
+        ttsSource: role === "user" ? undefined : "convai",
       });
     },
     onAudio: () => {
@@ -139,7 +157,7 @@ function buildSessionCallbacks(sinkId: string) {
 
 async function openConvaiSession(
   status: ConvaiStatus,
-  xbox: { micId: string; sinkId: string; micLabel?: string; sinkLabel?: string },
+  xbox: { micId: string; sinkId?: string; micLabel?: string; sinkLabel?: string },
   opts?: { reason?: string },
 ): Promise<Conversation> {
   const overrides = {
@@ -149,8 +167,15 @@ async function openConvaiSession(
     },
     tts: { voiceId: status.voice_id || IRISH_VOICE_ID },
   };
-  const device = { inputDeviceId: xbox.micId, outputDeviceId: xbox.sinkId };
-  const callbacks = buildSessionCallbacks(xbox.sinkId);
+  const sessionOpts: {
+    textOnly: false;
+    inputDeviceId: string;
+    outputDeviceId?: string;
+  } = { textOnly: false, inputDeviceId: xbox.micId };
+  if (xbox.sinkId && xbox.sinkId !== "default" && xbox.sinkId !== "communications") {
+    sessionOpts.outputDeviceId = xbox.sinkId;
+  }
+  const callbacks = buildSessionCallbacks(sessionOpts.outputDeviceId || xbox.sinkId || "");
 
   const tokenResp = await fetch("/api/convai/conversation-token");
   if (!tokenResp.ok) {
@@ -159,36 +184,25 @@ async function openConvaiSession(
   const { token } = (await tokenResp.json()) as { token?: string };
   if (!token) throw new Error("missing conversation token");
 
-  const inElectron = Boolean((window as unknown as { jarvis?: unknown }).jarvis);
-  console.log("[ConvAI] startSession Xbox in=%s out=%s electron=%s (%s)", xbox.micLabel, xbox.sinkLabel, inElectron, opts?.reason || "user");
-
-  // Electron: WebSocket audio path tends to be more reliable than WebRTC+setSinkId on hidden elements.
-  if (inElectron) {
-    const urlResp = await fetch("/api/convai/signed-url");
-    if (urlResp.ok) {
-      const { signed_url: signedUrl } = (await urlResp.json()) as { signed_url?: string };
-      if (signedUrl) {
-        lastConnectionType = "websocket";
-        return Conversation.startSession({
-          signedUrl,
-          connectionType: "websocket",
-          ...device,
-          overrides: overrides as never,
-          ...callbacks,
-        });
-      }
-    }
-  }
+  console.log(
+    "[ConvAI] startSession voice Xbox in=%s out=%s (%s)",
+    xbox.micLabel,
+    xbox.sinkLabel,
+    opts?.reason || "user",
+  );
 
   try {
     lastConnectionType = "webrtc";
-    return await Conversation.startSession({
+    const conv = await Conversation.startSession({
       conversationToken: token,
       connectionType: "webrtc",
-      ...device,
+      ...sessionOpts,
       overrides: overrides as never,
       ...callbacks,
     });
+    const voiceConv = conv as Conversation & { setVolume?: (v: { volume: number }) => void };
+    voiceConv.setVolume?.({ volume: 1 });
+    return conv;
   } catch (webrtcErr) {
     console.warn("[ConvAI] WebRTC failed — WebSocket fallback", webrtcErr);
   }
@@ -199,13 +213,16 @@ async function openConvaiSession(
   if (!signedUrl) throw new Error("missing signed_url");
 
   lastConnectionType = "websocket";
-  return Conversation.startSession({
+  const conv = await Conversation.startSession({
     signedUrl,
     connectionType: "websocket",
-    ...device,
+    ...sessionOpts,
     overrides: overrides as never,
     ...callbacks,
   });
+  const voiceConv = conv as Conversation & { setVolume?: (v: { volume: number }) => void };
+  voiceConv.setVolume?.({ volume: 1 });
+  return conv;
 }
 
 export async function forceConvaiAndStart(opts?: { reason?: string }) {
@@ -247,29 +264,28 @@ export async function startConvaiVoice(opts?: { reason?: string }): Promise<bool
     mic.stop();
     await grantXboxMicPermissionForLabels();
     const xbox = await resolveConvaiXboxDevices();
-    if (!xbox.micId || !xbox.sinkId) {
-      useStore.getState().setMicStatus("Xbox concrete ids missing");
-      return false;
-    }
-    if (xbox.micId === "default" || xbox.sinkId === "default") {
-      useStore.getState().setMicStatus("Refusing default pseudo device ids for ConvAI");
+    if (!xbox.micId) {
+      useStore.getState().setMicStatus("Xbox mic id missing for ConvAI");
       return false;
     }
 
-    await unlockConvaiPlayback(xbox.sinkId);
+    if (xbox.sinkId) await unlockConvaiPlayback(xbox.sinkId);
     session = await openConvaiSession(status, {
       micId: xbox.micId,
       sinkId: xbox.sinkId,
       micLabel: xbox.micLabel,
       sinkLabel: xbox.sinkLabel,
     }, opts);
-    await pinConvaiOutput(session, xbox.sinkId);
+    if (xbox.sinkId) await pinConvaiOutput(session, xbox.sinkId);
+    lastStartError = null;
     return true;
   } catch (e) {
+    lastStartError = String(e);
     console.error("[ConvAI] start failed", e);
     session = null;
     useStore.getState().setConvaiConnected(false);
     useStore.getState().setMicStatus(`ConvAI start failed: ${String(e).slice(0, 100)}`);
+    reportConvaiClient({ event: "start_failed", error: lastStartError });
     scheduleReconnect("start-failed");
     return false;
   } finally {
@@ -314,19 +330,7 @@ export async function convaiLiveDiag() {
     connectionType: lastConnectionType,
     sawAgentSpeaking,
     sessionLive: convaiSessionLive(),
+    lastStartError,
     audioElements: audios,
   };
-}
-
-if (typeof window !== "undefined") {
-  const g = globalThis as typeof globalThis & {
-    __jarvisConvaiStart?: () => Promise<boolean>;
-    __jarvisConvaiStop?: () => Promise<void>;
-    __jarvisForceConvaiStart?: () => Promise<unknown>;
-    __jarvisConvaiDiag?: () => Promise<unknown>;
-  };
-  g.__jarvisConvaiStart = () => startConvaiVoice({ reason: "console" });
-  g.__jarvisConvaiStop = stopConvaiVoice;
-  g.__jarvisForceConvaiStart = () => forceConvaiAndStart({ reason: "console-force" });
-  g.__jarvisConvaiDiag = () => convaiLiveDiag();
 }

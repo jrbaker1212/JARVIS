@@ -52,6 +52,12 @@ class JarvisWS {
       console.log("[WS] open");
       this.reconnectAttempt = 0;
       useStore.getState().setConnected(true);
+      useStore.getState().setVoiceEnabled(true);
+      void import("./convaiVoice").then((m) => {
+        if (useStore.getState().voicePipeline !== "legacy" && !useStore.getState().convaiConnected) {
+          void m.startConvaiVoice({ reason: "ws-reconnect" });
+        }
+      });
       this.startHeartbeat();
       this.send({ type: "ping" });
       this.flushPending();
@@ -242,22 +248,27 @@ class JarvisWS {
         break;
       case "user":
         break;
-      case "assistant":
+      case "assistant": {
         if (this.streamingId) {
-          st.finalizeChat(this.streamingId, m.text);
+          const cid = this.streamingId;
+          st.finalizeChat(cid, m.text);
+          useStore.setState((s) => ({
+            chat: s.chat.map((c) => (c.id === cid ? { ...c, ttsSource: "hud" as const } : c)),
+          }));
           this.streamingId = null;
         } else {
-          st.pushChat({ id: nextId(), role: "assistant", text: m.text, ts: Date.now() });
+          st.pushChat({ id: nextId(), role: "assistant", text: m.text, ts: Date.now(), ttsSource: "hud" });
         }
         st.setOrb("speaking");
         setTimeout(() => {
           if (useStore.getState().orbState === "speaking") useStore.getState().setOrb("idle");
         }, 2500);
         break;
+      }
       case "stream_begin": {
         const id = nextId();
         this.streamingId = id;
-        st.pushChat({ id, role: "assistant", text: "", ts: Date.now(), streaming: true });
+        st.pushChat({ id, role: "assistant", text: "", ts: Date.now(), streaming: true, ttsSource: "hud" });
         st.setOrb("speaking");
         break;
       }
