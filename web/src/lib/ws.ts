@@ -3,10 +3,18 @@ import { speak } from "./voice";
 
 type WSMessage = Record<string, any>;
 
+const HEARTBEAT_MS = 25_000;
+const RECONNECT_BASE_MS = 800;
+const RECONNECT_MAX_MS = 15_000;
+
 class JarvisWS {
   private ws: WebSocket | null = null;
   private url: string;
   private reconnectTimer: number | null = null;
+  private heartbeatTimer: number | null = null;
+  private reconnectAttempt = 0;
+  private intentionalClose = false;
+  private pendingOutbound: WSMessage[] = [];
   private listeners: Set<(m: WSMessage) => void> = new Set();
 
   constructor(url?: string) {
@@ -15,26 +23,55 @@ class JarvisWS {
   }
 
   connect() {
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
-      return;
+    if (this.ws) {
+      const rs = this.ws.readyState;
+      if (rs === WebSocket.OPEN || rs === WebSocket.CONNECTING) {
+        return;
+      }
+      // Dead socket — drop reference so we don't leak handlers.
+      try {
+        this.ws.onopen = null;
+        this.ws.onclose = null;
+        this.ws.onerror = null;
+        this.ws.onmessage = null;
+      } catch {
+        /* noop */
+      }
+      this.ws = null;
     }
+    this.intentionalClose = false;
     try {
+      console.log("[WS] connecting", this.url);
       this.ws = new WebSocket(this.url);
     } catch (e) {
-      console.error("ws connect failed", e);
+      console.error("[WS] connect failed", e);
       this.scheduleReconnect();
       return;
     }
     this.ws.onopen = () => {
+      console.log("[WS] open");
+      this.reconnectAttempt = 0;
       useStore.getState().setConnected(true);
+      this.startHeartbeat();
       this.send({ type: "ping" });
+      this.flushPending();
     };
-    this.ws.onclose = () => {
+    this.ws.onclose = (ev) => {
+      console.warn(
+        "[WS] closed code=%s reason=%s clean=%s",
+        ev.code,
+        ev.reason || "(none)",
+        ev.wasClean,
+      );
+      this.stopHeartbeat();
       useStore.getState().setConnected(false);
-      this.scheduleReconnect();
+      this.ws = null;
+      if (!this.intentionalClose) {
+        this.scheduleReconnect();
+      }
     };
     this.ws.onerror = () => {
-      // close handler will fire
+      console.warn("[WS] error (close will follow)");
     };
     this.ws.onmessage = (ev) => {
       try {
@@ -46,17 +83,82 @@ class JarvisWS {
     };
   }
 
+  /** Force a fresh socket (e.g. after Electron show / network online). */
+  reconnect() {
+    this.intentionalClose = true;
+    this.stopHeartbeat();
+    if (this.reconnectTimer != null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    try {
+      this.ws?.close();
+    } catch {
+      /* noop */
+    }
+    this.ws = null;
+    this.intentionalClose = false;
+    this.connect();
+  }
+
+  private startHeartbeat() {
+    this.stopHeartbeat();
+    this.heartbeatTimer = window.setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.send({ type: "ping" });
+      }
+    }, HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatTimer != null) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
   private scheduleReconnect() {
     if (this.reconnectTimer != null) return;
+    const delay = Math.min(
+      RECONNECT_MAX_MS,
+      RECONNECT_BASE_MS * Math.pow(1.6, this.reconnectAttempt),
+    );
+    this.reconnectAttempt++;
+    console.log("[WS] reconnect in %dms (attempt %d)", Math.round(delay), this.reconnectAttempt);
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
-    }, 1500);
+    }, delay);
   }
 
   send(msg: WSMessage) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg));
+      try {
+        this.ws.send(JSON.stringify(msg));
+      } catch (e) {
+        console.warn("[WS] send failed — queueing", e);
+        this.pendingOutbound.push(msg);
+        this.scheduleReconnect();
+      }
+      return;
+    }
+    if (msg.type !== "ping") {
+      this.pendingOutbound.push(msg);
+    }
+    this.connect();
+  }
+
+  private flushPending() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const batch = this.pendingOutbound.splice(0, this.pendingOutbound.length);
+    for (const msg of batch) {
+      try {
+        this.ws.send(JSON.stringify(msg));
+      } catch (e) {
+        console.warn("[WS] flush failed", e);
+        this.pendingOutbound.unshift(msg);
+        break;
+      }
     }
   }
 
@@ -91,8 +193,6 @@ class JarvisWS {
         endedAt: Date.now(),
       });
     } else if (m.type === "task_end") {
-      // task_end fires for whichever tool completed; the result may already
-      // be set. Only mark fail if explicitly ok=false.
       if (m.ok === false) {
         st.updateSwarmTask(runId, sid, { status: "fail", endedAt: Date.now() });
       }
@@ -107,16 +207,9 @@ class JarvisWS {
 
   private dispatch(m: WSMessage) {
     const st = useStore.getState();
-    // ── Swarm event routing ────────────────────────────────────────────
-    // Every backend event from a parallel_tasks subagent carries swarm_id
-    // ("<run_id>:<index>") and swarm_label. We mirror the event into the
-    // SwarmRun store entry so the SwarmPanel shows per-task progress in
-    // real time, in ADDITION to letting the original event also flow
-    // through the normal handlers below (so media still lands in hubs).
     if (m.swarm_id) {
       this.handleSwarmEvent(m);
     }
-    // The swarm dispatch announcement creates the run record.
     if (m.type === "info" && m.swarm === true && Array.isArray(m.tasks)) {
       const runId: string = (m.swarm_run_id as string) || nextId();
       st.startSwarm({
@@ -133,7 +226,6 @@ class JarvisWS {
       });
     }
     if (m.type === "info" && m.swarm === true && Array.isArray(m.summary)) {
-      // Final summary marker — flip the run to inactive.
       const runId: string | undefined = m.swarm_run_id;
       if (runId) st.finishSwarm(runId);
     }
@@ -149,11 +241,9 @@ class JarvisWS {
         st.setOrb("idle");
         break;
       case "user":
-        // already pushed locally — but we still respect server echo if needed
         break;
       case "assistant":
         if (this.streamingId) {
-          // Stream finished — replace partial with clean final text.
           st.finalizeChat(this.streamingId, m.text);
           this.streamingId = null;
         } else {
@@ -179,7 +269,6 @@ class JarvisWS {
       case "stream_end":
         if (this.streamingId) {
           st.finalizeChat(this.streamingId);
-          // keep id so a follow-up `assistant` (clean final) can replace text
         }
         break;
       case "thinking":
@@ -198,7 +287,6 @@ class JarvisWS {
         break;
       case "task_start":
         {
-          // text comes as "<tool>: <preview>"
           const toolName = (m.text || "").split(":")[0].trim();
           const tools = useStore.getState().tools.slice().reverse();
           const target = tools.find((t) => t.tool === toolName && t.status === "proposed");
@@ -215,7 +303,6 @@ class JarvisWS {
               ts: Date.now(),
             });
           }
-          // Friendly voice announcement for long / background tasks
           const TASK_ANNOUNCE: Record<string, string> = {
             image_generate:  "Generating image now, sir. Stand by…",
             image_to_3d:     "Converting image to 3D model, sir. This will take a moment…",
@@ -233,9 +320,6 @@ class JarvisWS {
           if (msg) {
             this.taskChatId = nextId();
             st.pushChat({ id: this.taskChatId, role: "info", text: msg, ts: Date.now() });
-            // Speak the announcement so JARVIS confirms it audibly. Honours
-            // the global voiceEnabled toggle; mic auto-mutes during TTS via
-            // the existing onTtsStart hook so we don't transcribe ourselves.
             speak(msg);
           }
         }
@@ -250,7 +334,6 @@ class JarvisWS {
         break;
       }
       case "task_end": {
-        // mark most recent running tool with this name as ok/fail
         const tools = useStore.getState().tools.slice().reverse();
         const target = tools.find((t) => t.status === "running");
         if (target) st.updateTool(target.id, { status: m.ok ? "ok" : "fail" });
@@ -267,7 +350,6 @@ class JarvisWS {
             duration_s: m.duration_s,
           });
         }
-        // Live-tick the plan checklist as each tool resolves successfully.
         if (m.ok) st.advancePlan();
         break;
       }
@@ -316,8 +398,8 @@ class JarvisWS {
   chat(text: string) {
     const st = useStore.getState();
     const attachments = st.pendingAttachments.length ? st.pendingAttachments : undefined;
-    st.clearPlan();  // retire any prior plan; a fresh one may arrive this turn
-    st.clearSuggestions();  // dismiss stale chips the moment a new turn starts
+    st.clearPlan();
+    st.clearSuggestions();
     this.send({ type: "chat", text, attachments });
     if (attachments) st.clearAttachments();
   }
@@ -328,7 +410,7 @@ class JarvisWS {
     this.send({ type: "confirm", id, approved });
   }
   agent(name: string) {
-    this.send({ type: "agent", name });
+    this.send({ type: "agent", name: name });
   }
   cancel() {
     this.send({ type: "cancel" });

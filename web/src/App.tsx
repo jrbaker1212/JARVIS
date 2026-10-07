@@ -190,7 +190,15 @@ export default function App() {
     const id = setInterval(() => {
       getHealth().then(setHealth).catch(() => undefined);
     }, 15_000);
-    return () => clearInterval(id);
+    const onOnline = () => {
+      console.log("[App] network online — ws reconnect");
+      wsClient.reconnect();
+    };
+    window.addEventListener("online", onOnline);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("online", onOnline);
+    };
   }, [setHealth]);
 
   // Restore wake-word listening after cold start when the user left it on.
@@ -221,6 +229,11 @@ export default function App() {
     });
     const offVis = j.on("jarvis:visibility-changed", (visible: boolean) => {
       hiddenRef.current = !visible;
+      if (visible) {
+        console.log("[App] window visible — ws reconnect");
+        wsClient.reconnect();
+        void unlockHudAudio();
+      }
     });
     return () => { offMode?.(); offVis?.(); };
   }, [setShellMode]);

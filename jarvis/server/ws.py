@@ -50,6 +50,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     # accept first." (see the ws_error trace from 2026-05-26 16:56:57).
     try:
         await ws.accept()
+        log.info("ws client connected")
     except Exception as e:  # noqa: BLE001
         log.info("ws accept aborted by client: %s", e)
         return
@@ -186,8 +187,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             else:
                 await safe_send({"type": "error", "text": f"unknown msg type: {mtype}"})
 
-    except WebSocketDisconnect:
-        log.info("ws client disconnected")
+    except WebSocketDisconnect as disc:
+        log.info(
+            "ws client disconnected code=%s reason=%s",
+            getattr(disc, "code", None),
+            getattr(disc, "reason", None) or "",
+        )
     except asyncio.CancelledError:
         # Receive-loop itself got cancelled (server shutdown). Just unwind.
         log.info("ws task cancelled")
