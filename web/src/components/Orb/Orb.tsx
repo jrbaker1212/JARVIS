@@ -35,8 +35,7 @@ export default function Orb() {
     <div className="absolute inset-0 z-[5] pointer-events-none flex flex-col items-center justify-center">
       <div
         ref={stageRef}
-        className="relative w-[clamp(280px,38vmin,560px)] aspect-square overflow-hidden rounded-full"
-        style={{ background: "#0b0f1a" }}
+        className="relative w-[clamp(280px,38vmin,560px)] aspect-square"
       >
         <canvas ref={canvasRef} className="block h-full w-full" aria-hidden />
       </div>
