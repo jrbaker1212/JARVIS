@@ -3,7 +3,7 @@ import { useStore } from "../../lib/store";
 const STATE_LABELS: Record<string, { label: string; color: string; dot: string }> = {
   idle:      { label: "STANDBY",    color: "text-jarvis-cyan",  dot: "bg-jarvis-cyan"  },
   listening: { label: "LISTENING",  color: "text-jarvis-aqua",  dot: "bg-jarvis-aqua"  },
-  thinking:  { label: "ANALYSING",  color: "text-jarvis-violet",dot: "bg-jarvis-violet"},
+  thinking:  { label: "ANALYSING",  color: "text-jarvis-teal",  dot: "bg-jarvis-teal"  },
   speaking:  { label: "RESPONDING", color: "text-jarvis-aqua",  dot: "bg-jarvis-aqua"  },
 };
 
@@ -45,8 +45,8 @@ export default function StatusBar() {
               className="absolute inset-y-0 left-0 transition-all duration-75 rounded-full"
               style={{
                 width: `${Math.min(100, audio * 250)}%`,
-                background: "linear-gradient(90deg, rgba(125,211,252,0.9), rgba(167,139,250,0.95))",
-                boxShadow: "0 0 10px rgba(125,211,252,0.7), 0 0 20px rgba(167,139,250,0.35)",
+                background: "linear-gradient(90deg, rgba(125,249,255,0.9), rgba(34,211,238,0.95))",
+                boxShadow: "0 0 10px rgba(0,212,255,0.7), 0 0 20px rgba(125,249,255,0.35)",
               }}
             />
           </div>

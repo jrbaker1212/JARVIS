@@ -1,374 +1,327 @@
-/**
- * JARVIS Orb — v5 "Reference Dial".
- *
- * Flat 2D composition matching canonical fan-art reference:
- *   - tick-mark outer ring
- *   - segmented vertical-bar ring on top arc
- *   - thick mid ring with bracket cutouts on sides
- *   - amber accent dots + amber side brackets
- *   - inner compass dial with fine radial markings
- *   - centered "J.A.R.V.I.S." text
- *
- * Implemented in SVG so it stays crisp at any scale. Each layer rotates at
- * its own speed via CSS animation; state-driven palette + speed multiplier
- * is patched in via JS for cyan/violet/aqua transitions.
+﻿/**
+ * JARVIS Orb — TecTimmy-style particle neural constellation.
+ * Cyan/teal wireframe sphere on #0B0F1A — white-cyan core bloom, no face, no gold.
  */
 import { useEffect, useRef } from "react";
 import { useStore, type OrbState } from "../../lib/store";
 
-const PALETTE: Record<OrbState, {
-  cyan: string;    // primary stroke
-  glow: string;    // soft accent
-  amber: string;   // status pip
-  speed: number;   // multiplier
-  intensity: number;
-}> = {
-  idle:      { cyan: "#22d3ee", glow: "#67e8f9", amber: "#facc15", speed: 1.0, intensity: 0.85 },
-  listening: { cyan: "#5ee9ff", glow: "#a7f3ff", amber: "#fde047", speed: 1.6, intensity: 1.10 },
-  thinking:  { cyan: "#9b8cff", glow: "#c4b5fd", amber: "#f59e0b", speed: 2.8, intensity: 1.20 },
-  speaking:  { cyan: "#67e8f9", glow: "#a5f3fc", amber: "#fde68a", speed: 1.3, intensity: 1.40 },
+const PALETTE: Record<
+  OrbState,
+  { node: string; line: string; core: string; speed: number; intensity: number; link: number; breathe: number }
+> = {
+  idle: {
+    node: "#5ee9ff",
+    line: "rgba(0, 212, 255, 0.28)",
+    core: "#e8fcff",
+    speed: 0.35,
+    intensity: 0.82,
+    link: 0.34,
+    breathe: 1,
+  },
+  listening: {
+    node: "#7df9ff",
+    line: "rgba(94, 233, 255, 0.42)",
+    core: "#ffffff",
+    speed: 0.55,
+    intensity: 1.05,
+    link: 0.36,
+    breathe: 1.15,
+  },
+  thinking: {
+    node: "#22d3ee",
+    line: "rgba(34, 211, 238, 0.48)",
+    core: "#ffffff",
+    speed: 1.05,
+    intensity: 1.18,
+    link: 0.38,
+    breathe: 1.25,
+  },
+  speaking: {
+    node: "#a5f3fc",
+    line: "rgba(125, 249, 255, 0.52)",
+    core: "#ffffff",
+    speed: 0.65,
+    intensity: 1.35,
+    link: 0.37,
+    breathe: 1.4,
+  },
 };
 
+const STATE_CAPTION: Record<OrbState, string> = {
+  idle: "",
+  listening: "listening…",
+  thinking: "thinking…",
+  speaking: "speaking…",
+};
+
+const PARTICLE_COUNT = 260;
+
+type Particle = {
+  bx: number;
+  by: number;
+  bz: number;
+  phase: number;
+  size: number;
+};
+
+function buildLinks(parts: Particle[], maxDist: number): [number, number][] {
+  const maxD2 = maxDist * maxDist;
+  const links: [number, number][] = [];
+  for (let i = 0; i < parts.length; i++) {
+    for (let j = i + 1; j < parts.length; j++) {
+      const dx = parts[i].bx - parts[j].bx;
+      const dy = parts[i].by - parts[j].by;
+      const dz = parts[i].bz - parts[j].bz;
+      if (dx * dx + dy * dy + dz * dz <= maxD2) links.push([i, j]);
+    }
+  }
+  return links;
+}
+
+function fibonacciSphere(n: number, r: number): Particle[] {
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const out: Particle[] = [];
+  for (let i = 0; i < n; i++) {
+    const y = 1 - (i / (n - 1)) * 2;
+    const rad = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = golden * i;
+    const x = Math.cos(theta) * rad;
+    const z = Math.sin(theta) * rad;
+    const jitter = 0.04 + Math.random() * 0.06;
+    out.push({
+      bx: x * r * (0.92 + jitter * 0.3),
+      by: y * r * (0.92 + jitter * 0.3),
+      bz: z * r * (0.92 + jitter * 0.3),
+      phase: Math.random() * Math.PI * 2,
+      size: 0.55 + Math.random() * 1.1,
+    });
+  }
+  return out;
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 export default function Orb() {
-  const ref = useRef<HTMLDivElement>(null);
-  const cur = useRef({ cyan: PALETTE.idle.cyan, glow: PALETTE.idle.glow, amber: PALETTE.idle.amber, speed: 1, intensity: 0.85, audio: 0 });
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const particlesRef = useRef<Particle[] | null>(null);
+  const linksRef = useRef<[number, number][]>([]);
+  const smoothRef = useRef({
+    speed: PALETTE.idle.speed,
+    intensity: PALETTE.idle.intensity,
+    audio: 0,
+    link: PALETTE.idle.link,
+    breathe: PALETTE.idle.breathe,
+  });
+  const orbState = useStore((s) => s.orbState);
 
   useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+
+    const ctx = canvas.getContext("2d", { alpha: true });
+    if (!ctx) return;
+
     let raf = 0;
-    const tick = () => {
-      const st = useStore.getState();
-      const t = PALETTE[st.orbState];
-      const c = cur.current;
-      const k = 0.08;
-      c.intensity += (t.intensity * (1 + st.audioLevel * 0.6) - c.intensity) * k;
-      c.speed     += (t.speed - c.speed) * k;
-      c.audio     += (st.audioLevel - c.audio) * k * 2;
-      // lerp hex colors via DOM CSS vars (we just snap when state changes —
-      // the CSS transition smooths it).
-      c.cyan  = t.cyan;
-      c.glow  = t.glow;
-      c.amber = t.amber;
-      if (ref.current) {
-        ref.current.style.setProperty("--orb-cyan",  c.cyan);
-        ref.current.style.setProperty("--orb-glow",  c.glow);
-        ref.current.style.setProperty("--orb-amber", c.amber);
-        ref.current.style.setProperty("--orb-speed", `${c.speed.toFixed(3)}`);
-        ref.current.style.setProperty("--orb-intensity", c.intensity.toFixed(3));
-        ref.current.style.setProperty("--orb-audio", c.audio.toFixed(3));
-      }
-      raf = requestAnimationFrame(tick);
+    let t0 = performance.now();
+    let w = 0;
+    let h = 0;
+    let dpr = 1;
+
+    const resize = () => {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const rect = wrap.getBoundingClientRect();
+      w = Math.max(280, rect.width);
+      h = Math.max(280, rect.height);
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const radius = Math.min(w, h) * 0.36;
+      const parts = fibonacciSphere(PARTICLE_COUNT, radius);
+      particlesRef.current = parts;
+      linksRef.current = buildLinks(parts, radius * 0.38);
     };
-    tick();
-    return () => cancelAnimationFrame(raf);
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+
+    const draw = (now: number) => {
+      t0 = now;
+      const st = useStore.getState();
+      const pal = PALETTE[st.orbState];
+      const sm = smoothRef.current;
+      const k = 0.07;
+      sm.speed += (pal.speed - sm.speed) * k;
+      sm.intensity += (pal.intensity * (1 + st.audioLevel * 0.55) - sm.intensity) * k;
+      sm.audio += (st.audioLevel - sm.audio) * k * 2.2;
+      sm.link += (pal.link - sm.link) * k;
+      sm.breathe += (pal.breathe - sm.breathe) * k;
+
+      const parts = particlesRef.current;
+      if (!parts) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
+
+      const cx = w / 2;
+      const cy = h / 2;
+      const time = now * 0.001;
+      const rotY = time * sm.speed * 0.9;
+      const rotX = time * sm.speed * 0.35 + 0.4;
+      const audioPulse = sm.audio * 0.22;
+      const breathe = 1 + Math.sin(time * 1.6 * sm.breathe) * 0.035 + audioPulse;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Soft core bloom (canvas layer)
+      const coreR = Math.min(w, h) * (0.14 + sm.audio * 0.06);
+      const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 2.8);
+      bloom.addColorStop(0, `rgba(255,255,255,${0.55 * sm.intensity + sm.audio * 0.35})`);
+      bloom.addColorStop(0.2, `rgba(125,249,255,${0.35 * sm.intensity})`);
+      bloom.addColorStop(0.55, `rgba(0,212,255,${0.12 * sm.intensity})`);
+      bloom.addColorStop(1, "rgba(11,15,26,0)");
+      ctx.fillStyle = bloom;
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR * 2.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      const sinY = Math.sin(rotY);
+      const cosY = Math.cos(rotY);
+      const sinX = Math.sin(rotX);
+      const cosX = Math.cos(rotX);
+
+      const projected: { x: number; y: number; z: number; i: number; size: number }[] = [];
+
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        const wobble =
+          Math.sin(time * 2.2 + p.phase) * 2.5 * sm.intensity +
+          Math.cos(time * 1.7 + p.phase * 1.3) * 1.8;
+        let x = p.bx * breathe + wobble * 0.015 * p.bx;
+        let y = p.by * breathe + wobble * 0.015 * p.by;
+        let z = p.bz * breathe + wobble * 0.015 * p.bz;
+
+        // Y rotation
+        const x1 = x * cosY - z * sinY;
+        const z1 = x * sinY + z * cosY;
+        x = x1;
+        z = z1;
+        // X rotation
+        const y2 = y * cosX - z * sinX;
+        const z2 = y * sinX + z * cosX;
+        y = y2;
+        z = z2;
+
+        const perspective = 420 / (420 - z);
+        projected.push({
+          x: cx + x * perspective,
+          y: cy + y * perspective,
+          z,
+          i,
+          size: p.size * perspective * (0.85 + sm.audio * 0.35),
+        });
+      }
+
+      projected.sort((a, b) => a.z - b.z);
+
+      const [lr, lg, lb] = hexToRgb(pal.node);
+      const byIndex = new Map<number, (typeof projected)[0]>();
+      for (const p of projected) byIndex.set(p.i, p);
+
+      // Neural wireframe links (precomputed 3D adjacency)
+      ctx.lineCap = "round";
+      for (const [ia, ib] of linksRef.current) {
+        const pa = byIndex.get(ia);
+        const pb = byIndex.get(ib);
+        if (!pa || !pb) continue;
+        const depth = (pa.z + pb.z) * 0.5;
+        const alpha = (0.12 + sm.intensity * 0.28) * (0.35 + (depth + 120) / 240);
+        ctx.strokeStyle = `rgba(${lr},${lg},${lb},${alpha})`;
+        ctx.lineWidth = 0.45 + sm.intensity * 0.25;
+        ctx.beginPath();
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+        ctx.stroke();
+      }
+
+      // Nodes
+      for (const p of projected) {
+        const depthNorm = (p.z + 140) / 280;
+        const alpha = 0.25 + depthNorm * 0.75;
+        const glow = p.size * (1.2 + sm.intensity * 0.5);
+        ctx.fillStyle = `rgba(${lr},${lg},${lb},${alpha * 0.35})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, glow * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = depthNorm > 0.72 ? pal.core : pal.node;
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // Hot center
+      const hot = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+      hot.addColorStop(0, `rgba(255,255,255,${0.92 + sm.audio * 0.08})`);
+      hot.addColorStop(0.35, `rgba(186,249,255,${0.55 * sm.intensity})`);
+      hot.addColorStop(1, "rgba(0,212,255,0)");
+      ctx.fillStyle = hot;
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
+      ctx.fill();
+
+      raf = requestAnimationFrame(draw);
+    };
+
+    raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, []);
+
+  const caption = STATE_CAPTION[orbState];
 
   return (
     <div
-      ref={ref}
-      className="absolute inset-0 pointer-events-none flex items-center justify-center"
-      style={{
-        // Defaults so the CSS animations don't choke before first tick.
-        ["--orb-cyan"  as any]: PALETTE.idle.cyan,
-        ["--orb-glow"  as any]: PALETTE.idle.glow,
-        ["--orb-amber" as any]: PALETTE.idle.amber,
-        ["--orb-speed" as any]: 1,
-        ["--orb-intensity" as any]: 0.85,
-        ["--orb-audio" as any]: 0,
-      }}
+      ref={wrapRef}
+      className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center"
     >
       <div className="relative w-[clamp(280px,38vmin,560px)] aspect-square">
-        {/* Volumetric blue halo — breathes + brightens with voice */}
         <div
           className="absolute inset-0 rounded-full"
           style={{
             background:
-              "radial-gradient(circle at center, color-mix(in srgb, var(--orb-glow) 28%, transparent) 0%, transparent 58%)",
-            filter: "blur(8px)",
-            opacity: "calc(var(--orb-intensity) * 0.9 + var(--orb-audio) * 0.4)",
-            transform: "scale(calc(1 + var(--orb-audio) * 0.18))",
-            transition: "background 0.6s ease",
+              "radial-gradient(circle at center, rgba(0,212,255,0.22) 0%, rgba(14,165,233,0.08) 35%, transparent 62%)",
+            filter: "blur(14px)",
+            opacity: 0.85,
           }}
         />
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+      </div>
 
-        {/* SVG dial */}
-        <svg
-          viewBox="-100 -100 200 200"
-          className="absolute inset-0 w-full h-full"
-          style={{
-            filter:
-              "drop-shadow(0 0 calc(6px + var(--orb-audio) * 9px) color-mix(in srgb, var(--orb-glow) 70%, transparent)) drop-shadow(0 0 calc(18px + var(--orb-audio) * 20px) color-mix(in srgb, var(--orb-glow) 35%, transparent))",
-          }}
-        >
-          <defs>
-            <linearGradient id="ring-fade" x1="0" y1="-1" x2="0" y2="1">
-              <stop offset="0%"  stopColor="var(--orb-cyan)" stopOpacity="1" />
-              <stop offset="100%" stopColor="var(--orb-cyan)" stopOpacity="0.45" />
-            </linearGradient>
-            <radialGradient id="core-fill" cx="50%" cy="50%" r="50%">
-              <stop offset="0%"  stopColor="var(--orb-cyan)" stopOpacity="0.30" />
-              <stop offset="60%" stopColor="var(--orb-cyan)" stopOpacity="0.05" />
-              <stop offset="100%" stopColor="var(--orb-cyan)" stopOpacity="0" />
-            </radialGradient>
-            <radialGradient id="reactor-core" cx="50%" cy="50%" r="50%">
-              <stop offset="0%"   stopColor="#ffffff"        stopOpacity="0.95" />
-              <stop offset="24%"  stopColor="var(--orb-glow)" stopOpacity="0.85" />
-              <stop offset="58%"  stopColor="var(--orb-cyan)" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="var(--orb-cyan)" stopOpacity="0" />
-            </radialGradient>
-            <radialGradient id="reactor-bloom" cx="50%" cy="50%" r="50%">
-              <stop offset="0%"   stopColor="var(--orb-glow)" stopOpacity="0.5" />
-              <stop offset="68%"  stopColor="var(--orb-cyan)" stopOpacity="0.12" />
-              <stop offset="100%" stopColor="var(--orb-cyan)" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-
-          {/* Soft inner fill */}
-          <circle cx="0" cy="0" r="42" fill="url(#core-fill)" />
-
-          {/* ─── L1 outermost: tick ring (slow CCW) ─── */}
-          <g style={{ animation: "orb-spin-ccw calc(38s / var(--orb-speed)) linear infinite", transformOrigin: "0 0" }}>
-            <Ticks radius={92} count={120} long={3} short={1.4} thick={0.5} color="var(--orb-cyan)" majorEvery={5} majorLen={5} />
-            <circle cx="0" cy="0" r="88" fill="none" stroke="var(--orb-cyan)" strokeOpacity="0.25" strokeWidth="0.4" />
-          </g>
-
-          {/* ─── L2 segmented vertical bars (top arc only) — slow CW ─── */}
-          <g style={{ animation: "orb-spin calc(50s / var(--orb-speed)) linear infinite", transformOrigin: "0 0" }}>
-            <TopArcBars radius={80} count={40} long={6} thick={1.0} color="var(--orb-cyan)" />
-          </g>
-
-          {/* ─── L3 thick ring with bracket cutouts ─── */}
-          <g style={{ animation: "orb-spin-ccw calc(60s / var(--orb-speed)) linear infinite", transformOrigin: "0 0" }}>
-            <BracketRing radius={70} thickness={4.5} gapDeg={26} color="var(--orb-cyan)" />
-            {/* Amber pips at 10° → top arc */}
-            <AmberDots radius={70} count={6} startDeg={-25} endDeg={25} color="var(--orb-amber)" r={1.6} />
-          </g>
-
-          {/* ─── L4 amber side brackets (static, just rotates very slowly) ─── */}
-          <g style={{ animation: "orb-spin calc(180s / var(--orb-speed)) linear infinite", transformOrigin: "0 0" }}>
-            <AmberBracket angleDeg={-100} radius={60} size={5} color="var(--orb-amber)" />
-            <AmberBracket angleDeg={80}   radius={60} size={5} color="var(--orb-amber)" />
-          </g>
-
-          {/* ─── L5 inner dashed ring (medium CCW) ─── */}
-          <g style={{ animation: "orb-spin-ccw calc(28s / var(--orb-speed)) linear infinite", transformOrigin: "0 0" }}>
-            <circle
-              cx="0" cy="0" r="54"
-              fill="none" stroke="var(--orb-cyan)" strokeWidth="0.6"
-              strokeDasharray="2 2.4" strokeOpacity="0.85"
-            />
-          </g>
-
-          {/* ─── L6 inner compass ticks (fast CW) ─── */}
-          <g style={{ animation: "orb-spin calc(16s / var(--orb-speed)) linear infinite", transformOrigin: "0 0" }}>
-            <Ticks radius={48} count={72} long={2} short={0.9} thick={0.35} color="var(--orb-cyan)" majorEvery={6} majorLen={3.5} />
-          </g>
-
-          {/* ─── L7 innermost solid ring ─── */}
-          <circle cx="0" cy="0" r="42" fill="none" stroke="var(--orb-cyan)" strokeWidth="0.7" strokeOpacity="0.9" />
-          <circle cx="0" cy="0" r="39" fill="none" stroke="var(--orb-glow)" strokeWidth="0.4" strokeOpacity="0.55" />
-
-          {/* ─── Arc-reactor core — volumetric, breathes with voice ─── */}
-          <g style={{ transformOrigin: "0 0", transform: "scale(calc(1 + var(--orb-audio) * 0.5))" }}>
-            <circle
-              cx="0" cy="0" r="33" fill="url(#reactor-bloom)"
-              style={{ opacity: "calc(0.4 + var(--orb-audio) * 0.55)" }}
-            />
-            <circle
-              cx="0" cy="0" r="15" fill="url(#reactor-core)"
-              style={{
-                opacity: "calc(0.55 + var(--orb-audio) * 0.45)",
-                filter: "drop-shadow(0 0 calc(4px + var(--orb-audio) * 16px) var(--orb-glow))",
-              }}
-            />
-            {/* Triangular reactor coil — the Mark arc-reactor motif, slow spin */}
-            <g style={{ animation: "orb-spin calc(24s / var(--orb-speed)) linear infinite", transformOrigin: "0 0", opacity: 0.8 }}>
-              <ReactorTri r={10.5} color="var(--orb-glow)" />
-            </g>
-          </g>
-
-          {/* ─── Center text ─── */}
-          <text
-            x="0" y="2.5"
-            textAnchor="middle"
-            fontFamily="Orbitron, sans-serif"
-            fontSize="9.5"
-            letterSpacing="2"
-            fill="var(--orb-glow)"
-            style={{
-              filter: "drop-shadow(0 0 calc(2px + var(--orb-audio) * 6px) var(--orb-glow))",
-              opacity: "calc(0.85 * var(--orb-intensity))",
-            }}
+      <div className="mt-2 flex flex-col items-center gap-1 text-center">
+        {caption ? (
+          <span
+            className="font-sans text-sm tracking-wide text-[#5ee9ff]"
+            style={{ textShadow: "0 0 12px rgba(0,212,255,0.45)" }}
           >
-            J.A.R.V.I.S.
-          </text>
-          {/* Subtitle */}
-          <text
-            x="0" y="9"
-            textAnchor="middle"
-            fontFamily="JetBrains Mono, monospace"
-            fontSize="3.4"
-            letterSpacing="1.4"
-            fill="var(--orb-cyan)"
-            opacity="0.55"
-          >
-            MARK · IV
-          </text>
-        </svg>
-
-        {/* CSS keyframes injected once */}
-        <style>{`
-          @keyframes orb-spin     { from { transform: rotate(0deg);  } to { transform: rotate(360deg);  } }
-          @keyframes orb-spin-ccw { from { transform: rotate(360deg);} to { transform: rotate(0deg);    } }
-        `}</style>
+            {caption}
+          </span>
+        ) : null}
+        <span className="font-mono text-[10px] tracking-[0.35em] text-[#64748b] uppercase">
+          JARVIS
+        </span>
       </div>
     </div>
-  );
-}
-
-/* ───────────── Sub-components (SVG primitives) ───────────── */
-
-function Ticks({
-  radius, count, long, short, thick, color, majorEvery, majorLen,
-}: {
-  radius: number; count: number; long: number; short: number;
-  thick: number; color: string; majorEvery: number; majorLen: number;
-}) {
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    const a = (i / count) * 360;
-    const major = i % majorEvery === 0;
-    const len = major ? majorLen : (i % 2 === 0 ? long : short);
-    out.push(
-      <line
-        key={i}
-        x1={radius} y1={0}
-        x2={radius - len} y2={0}
-        stroke={color}
-        strokeOpacity={major ? 0.95 : 0.55}
-        strokeWidth={major ? thick * 1.4 : thick}
-        transform={`rotate(${a})`}
-      />
-    );
-  }
-  return <>{out}</>;
-}
-
-function TopArcBars({
-  radius, count, long, thick, color,
-}: { radius: number; count: number; long: number; thick: number; color: string }) {
-  const out = [];
-  // Bars span from -55° to +55° around top.
-  const start = -55, end = 55;
-  for (let i = 0; i < count; i++) {
-    const a = start + (end - start) * (i / (count - 1));
-    out.push(
-      <line
-        key={i}
-        x1="0" y1={-radius}
-        x2="0" y2={-(radius - long)}
-        stroke={color}
-        strokeOpacity={0.85}
-        strokeWidth={thick}
-        transform={`rotate(${a})`}
-      />
-    );
-  }
-  return <>{out}</>;
-}
-
-function BracketRing({
-  radius, thickness, gapDeg, color,
-}: { radius: number; thickness: number; gapDeg: number; color: string }) {
-  // Two big arcs separated by left & right gaps (the bracket cutouts).
-  const half = gapDeg / 2;
-  const arc = (startDeg: number, endDeg: number) => {
-    const rad = (d: number) => (d - 90) * Math.PI / 180; // SVG 0deg = up
-    const x1 = Math.cos(rad(startDeg)) * radius;
-    const y1 = Math.sin(rad(startDeg)) * radius;
-    const x2 = Math.cos(rad(endDeg)) * radius;
-    const y2 = Math.sin(rad(endDeg)) * radius;
-    const large = (endDeg - startDeg) > 180 ? 1 : 0;
-    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2}`;
-  };
-  return (
-    <>
-      <path d={arc(-90 + half, 90 - half)}  fill="none" stroke={color} strokeWidth={thickness} strokeOpacity="0.85" strokeLinecap="butt" />
-      <path d={arc(90 + half,  270 - half)} fill="none" stroke={color} strokeWidth={thickness} strokeOpacity="0.85" strokeLinecap="butt" />
-      {/* Bracket cap markers at the cutouts */}
-      {[-(90 + half), -(90 - half), (90 + half), (90 - half)].map((deg, i) => (
-        <line
-          key={i}
-          x1="0" y1={-(radius - thickness / 2 - 1)}
-          x2="0" y2={-(radius + thickness / 2 + 1)}
-          stroke={color} strokeWidth="0.7" strokeOpacity="0.8"
-          transform={`rotate(${deg + 90})`}
-        />
-      ))}
-    </>
-  );
-}
-
-function AmberDots({
-  radius, count, startDeg, endDeg, color, r,
-}: { radius: number; count: number; startDeg: number; endDeg: number; color: string; r: number }) {
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    const a = startDeg + (endDeg - startDeg) * (i / (count - 1));
-    const rad = (a - 90) * Math.PI / 180;
-    const x = Math.cos(rad) * radius;
-    const y = Math.sin(rad) * radius;
-    out.push(
-      <circle key={i} cx={x} cy={y} r={r} fill={color}
-        style={{ filter: `drop-shadow(0 0 2px ${color})` }}
-      />
-    );
-  }
-  return <>{out}</>;
-}
-
-function ReactorTri({ r, color }: { r: number; color: string }) {
-  // Equilateral triangle (pointing up) with coil nodes at each vertex —
-  // the iconic Mark arc-reactor motif.
-  const pts = [0, 120, 240].map((deg) => {
-    const rad = (deg - 90) * Math.PI / 180;
-    return [Math.cos(rad) * r, Math.sin(rad) * r] as const;
-  });
-  const path = `M ${pts[0][0]} ${pts[0][1]} L ${pts[1][0]} ${pts[1][1]} L ${pts[2][0]} ${pts[2][1]} Z`;
-  return (
-    <>
-      <path
-        d={path} fill="none" stroke={color} strokeWidth="1.1"
-        strokeOpacity="0.85" strokeLinejoin="round"
-        style={{ filter: `drop-shadow(0 0 2px ${color})` }}
-      />
-      {pts.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="1.7" fill={color}
-          style={{ filter: `drop-shadow(0 0 2px ${color})` }} />
-      ))}
-    </>
-  );
-}
-
-function AmberBracket({
-  angleDeg, radius, size, color,
-}: { angleDeg: number; radius: number; size: number; color: string }) {
-  const rad = (angleDeg - 90) * Math.PI / 180;
-  const x = Math.cos(rad) * radius;
-  const y = Math.sin(rad) * radius;
-  return (
-    <g transform={`translate(${x} ${y}) rotate(${angleDeg + 90})`}>
-      <rect
-        x={-size * 1.6} y={-size / 2}
-        width={size * 3.2} height={size}
-        rx={size / 4}
-        fill="none" stroke={color} strokeWidth="0.8" strokeOpacity="0.95"
-        style={{ filter: `drop-shadow(0 0 2px ${color})` }}
-      />
-      <rect
-        x={-size * 1.1} y={-size / 4}
-        width={size * 2.2} height={size / 2}
-        fill={color} fillOpacity="0.35"
-      />
-    </g>
   );
 }

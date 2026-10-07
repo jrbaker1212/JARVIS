@@ -15,10 +15,12 @@ export default function TopBar() {
   const date = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 
   return (
-    <div className="absolute top-0 inset-x-0 z-40 pointer-events-none">
-      <div className="flex items-center justify-between px-6 py-3">
-        {/* ── LEFT — Identity ──────────────────────────────────────── */}
-        <div className="pointer-events-auto flex items-center gap-5">
+    /* Frameless Electron: this strip is the window drag handle (~36px).
+       Interactive controls inside MUST carry .app-no-drag. */
+    <div className="absolute top-0 inset-x-0 z-40 select-none app-drag">
+      <div className="h-9 flex items-center justify-between px-6">
+        {/* LEFT - Identity */}
+        <div className="flex items-center gap-5">
           <div className="flex items-center gap-3">
             <div className="relative">
               <div
@@ -28,11 +30,12 @@ export default function TopBar() {
                 <div className="absolute inset-0 w-2 h-2 rounded-full bg-jarvis-ok blur-md opacity-70" />
               )}
             </div>
-            <span className="text-display text-[13px] tracking-[0.45em] text-shimmer font-medium">
-              J.A.R.V.I.S.
+            <span className="text-display text-[13px] tracking-[0.35em] font-medium">
+              <span className="text-[#00e5ff]" style={{ textShadow: "0 0 12px rgba(0,229,255,0.65)" }}>JARVIS</span>
+              <span className="text-[#22d3ee]" style={{ textShadow: "0 0 10px rgba(34,211,238,0.55)" }}>//HUD</span>
             </span>
-            <span className="text-mono text-[10px] text-jarvis-cyan/40 px-1.5 py-0.5 border border-jarvis-cyan/15 rounded-md">
-              MK&nbsp;II
+            <span className="text-mono text-[10px] text-[#5ee9ff]/90 px-1.5 py-0.5 border border-[#00d4ff]/35 rounded-md">
+              LOCAL
             </span>
           </div>
           <div className="hidden md:flex text-mono text-[10.5px] text-jarvis-ice/40 gap-4">
@@ -44,11 +47,11 @@ export default function TopBar() {
           </div>
         </div>
 
-        {/* ── RIGHT — Clock ────────────────────────────────────────── */}
-        <div className="pointer-events-auto flex items-center gap-4">
-          <div className="text-mono text-right leading-tight tabular-nums">
-            <div className="text-[15px] text-jarvis-ice glow-text tracking-wider">{time}</div>
-            <div className="text-[10px] text-jarvis-ice/40 uppercase tracking-[0.2em]">{date}</div>
+        {/* RIGHT - Clock */}
+        <div className="flex items-center gap-4">
+          <div className="text-mono text-right leading-none tabular-nums">
+            <div className="text-[13px] text-jarvis-ice glow-text tracking-wider">{time}</div>
+            <div className="text-[9px] text-jarvis-ice/40 uppercase tracking-[0.2em] mt-0.5">{date}</div>
           </div>
         </div>
       </div>

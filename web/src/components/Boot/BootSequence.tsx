@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "../../lib/store";
 
 const LINES = [
-  "INITIALISING J.A.R.V.I.S. KERNEL ...",
+  "INITIALISING NEXEY KERNEL ...",
   "LINKING NATURAL-LANGUAGE CORE ...",
   "CALIBRATING BRITISH VOICE PROFILE ...",
   "ESTABLISHING SECURE LOCAL UPLINK ...",
@@ -41,23 +41,29 @@ export default function BootSequence() {
           <div className="text-center space-y-6">
             <div className="relative w-40 h-40 mx-auto">
               <motion.div
-                className="absolute inset-0 rounded-full border-2 border-jarvis-cyan/60"
+                className="absolute inset-0 rounded-full"
+                style={{
+                  background: "radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(0,212,255,0.25) 35%, transparent 65%)",
+                  filter: "blur(6px)",
+                }}
+                animate={{ scale: [1, 1.12, 1], opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 1.6, repeat: Infinity }}
+              />
+              <motion.div
+                className="absolute inset-2 rounded-full border border-jarvis-cyan/40"
                 animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}
               />
               <motion.div
-                className="absolute inset-4 rounded-full border border-jarvis-aqua/50"
+                className="absolute inset-6 rounded-full border border-jarvis-teal/50 border-dashed"
                 animate={{ rotate: -360 }}
-                transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                transition={{ duration: 3.2, repeat: Infinity, ease: "linear" }}
               />
               <motion.div
-                className="absolute inset-12 rounded-full bg-jarvis-cyan/40"
-                animate={{ scale: [1, 1.3, 1], opacity: [0.6, 1, 0.6] }}
+                className="absolute inset-[2.75rem] rounded-full bg-white/90 shadow-[0_0_24px_rgba(125,249,255,0.75)]"
+                animate={{ scale: [1, 1.15, 1], opacity: [0.85, 1, 0.85] }}
                 transition={{ duration: 1.4, repeat: Infinity }}
               />
-              <div className="absolute inset-0 flex items-center justify-center text-display text-jarvis-cyan tracking-widest text-xs glow-text">
-                J.A.R.V.I.S.
-              </div>
             </div>
 
             <div className="text-mono text-xs text-jarvis-cyan/70 space-y-1 text-left min-w-[380px]">

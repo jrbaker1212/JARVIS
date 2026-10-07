@@ -6,20 +6,22 @@ export default {
     extend: {
       colors: {
         jarvis: {
-          cyan:   "#7dd3fc",   // softer, premium cyan
-          aqua:   "#a5f3fc",
-          ice:    "#e0f2fe",
-          deep:   "#0a1424",
-          ink:    "#03070f",
-          abyss:  "#01030a",
+          cyan:   "#00e5ff",
+          aqua:   "#7df9ff",
+          ice:    "#e8fbff",
+          deep:   "#0b0f1a",
+          ink:    "#0b0f1a",
+          abyss:  "#070a12",
           panel:  "rgba(12, 22, 38, 0.42)",
           glass:  "rgba(255, 255, 255, 0.04)",
-          glow:   "#bae6fd",
-          violet: "#a78bfa",
-          gold:   "#fbbf24",
-          danger: "#fb7185",
-          warn:   "#fbbf24",
-          ok:     "#4ade80",
+          glow:   "#00d4ff",
+          teal:   "#22d3ee",
+          electric: "#0ea5e9",
+          violet: "#22d3ee",
+          gold:   "#5ee9ff",
+          danger: "#ff2d95",
+          warn:   "#f5c518",
+          ok:     "#00e5ff",
         },
       },
       fontFamily: {
@@ -39,8 +41,8 @@ export default {
         spin_slow: { from: { transform: "rotate(0deg)" }, to: { transform: "rotate(360deg)" } },
         spin_rev: { from: { transform: "rotate(360deg)" }, to: { transform: "rotate(0deg)" } },
         pulse_glow: {
-          "0%, 100%": { boxShadow: "0 0 0 0 rgba(125,211,252,0.0), 0 0 18px rgba(125,211,252,0.25)" },
-          "50%":      { boxShadow: "0 0 0 4px rgba(125,211,252,0.08), 0 0 32px rgba(125,211,252,0.55)" },
+          "0%, 100%": { boxShadow: "0 0 0 0 rgba(0,229,255,0.0), 0 0 18px rgba(0,212,255,0.22)" },
+          "50%":      { boxShadow: "0 0 0 4px rgba(34,211,238,0.12), 0 0 32px rgba(0,229,255,0.45)" },
         },
         boot_in: { from: { opacity: "0", transform: "translateY(8px) scale(0.985)" }, to: { opacity: "1", transform: "translateY(0) scale(1)" } },
         aurora_drift: {
@@ -69,7 +71,7 @@ export default {
         float_y: "float_y 6s ease-in-out infinite",
       },
       backgroundImage: {
-        grid: "linear-gradient(rgba(125,211,252,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(125,211,252,0.04) 1px, transparent 1px)",
+        grid: "linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px)",
       },
       backgroundSize: {
         grid: "44px 44px",

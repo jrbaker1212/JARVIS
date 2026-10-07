@@ -20,7 +20,7 @@ export default /* glsl */`
 
     // Iridescent shimmer
     float shimmer = 0.5 + 0.5 * sin(vPos.y * 6.0 + uTime * 1.4);
-    base += vec3(shimmer * 0.05, shimmer * 0.08, shimmer * 0.1);
+    base += vec3(shimmer * 0.04, shimmer * 0.10, shimmer * 0.12);
 
     // Pulse on audio
     float pulse = 0.7 + 0.6 * uAudio;

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Widget — compact side-panel rendering of JARVIS.
  *
  * Shown when shellMode === "widget". Designed for the always-on-top, slim
@@ -90,21 +90,13 @@ export default function Widget() {
           "linear-gradient(180deg, #04080f 0%, #05101e 100%)",
       }}
     >
-      {/* drag region — frameless windows on Win/macOS need an explicit
-          -webkit-app-region: drag area for the user to move the window.
-          Set as CSS inline because Tailwind has no built-in for it. */}
-      <div
-        className="h-9 flex items-center justify-between px-3 select-none border-b border-jarvis-cyan/10"
-        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-      >
+      {/* drag region — frameless Electron window move handle (~36px) */}
+      <div className="h-9 flex items-center justify-between px-3 select-none border-b border-jarvis-cyan/10 app-drag">
         <div className="flex items-center gap-2 text-[10px] tracking-[0.45em] uppercase opacity-70">
           <span className="w-1.5 h-1.5 rounded-full bg-jarvis-cyan animate-pulse" />
           J · A · R · V · I · S
         </div>
-        <div
-          className="flex items-center gap-1"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
+        <div className="flex items-center gap-1 app-no-drag">
           <button
             title="Expand to full HUD"
             onClick={() => {
@@ -163,8 +155,7 @@ export default function Widget() {
 
       {/* mini command bar */}
       <div
-        className="px-4 pb-4"
-        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        className="px-4 pb-4 app-no-drag"
       >
         <div className="rounded-2xl border border-jarvis-cyan/20 bg-jarvis-ink-2/60 backdrop-blur-md p-2 flex items-end gap-2">
           <button
@@ -215,24 +206,28 @@ export default function Widget() {
 function MiniOrb() {
   const orbState = useStore((s) => s.orbState);
   const audio = useStore((s) => s.audioLevel);
-  const ring = orbState === "listening"
-    ? "stroke-jarvis-cyan"
-    : orbState === "thinking"
-      ? "stroke-jarvis-violet"
-      : orbState === "speaking"
-        ? "stroke-jarvis-aqua"
-        : "stroke-jarvis-cyan/50";
+  const cyan = orbState === "speaking" ? "#7df9ff" : "#00e5ff";
+  const teal = "#22d3ee";
   const scale = 1 + Math.min(0.3, audio * 1.2);
   return (
-    <div className="w-12 h-12 shrink-0 relative">
+    <div className="w-14 h-14 shrink-0 relative">
       <div
-        className="absolute inset-1 rounded-full bg-jarvis-cyan/15 blur-md transition-transform"
-        style={{ transform: `scale(${scale})` }}
+        className="absolute inset-0 rounded-full blur-md transition-transform"
+        style={{
+          transform: `scale(${scale})`,
+          background: `radial-gradient(circle, #ffffff44 0%, ${cyan}33 40%, transparent 70%)`,
+        }}
       />
-      <svg viewBox="0 0 48 48" className="absolute inset-0 w-full h-full">
-        <circle cx="24" cy="24" r="14" className={ring} strokeWidth="1.2" fill="none" />
-        <circle cx="24" cy="24" r="9" className={ring} strokeWidth="0.8" fill="none" opacity="0.6" />
-        <circle cx="24" cy="24" r="4" className="fill-jarvis-cyan/80" />
+      <svg viewBox="0 0 56 56" className="absolute inset-0 w-full h-full">
+        <defs>
+          <radialGradient id="mini-core">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="100%" stopColor={cyan} />
+          </radialGradient>
+        </defs>
+        <circle cx="28" cy="28" r="24" fill="none" stroke={cyan} strokeWidth="1.1" opacity="0.85" />
+        <circle cx="28" cy="28" r="18" fill="none" stroke={teal} strokeWidth="0.8" strokeDasharray="2 2" opacity="0.9" />
+        <circle cx="28" cy="28" r="6" fill="url(#mini-core)" opacity="0.95" />
       </svg>
     </div>
   );
