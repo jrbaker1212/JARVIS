@@ -497,10 +497,11 @@ async function loadApp() {
             start: typeof start === "function",
             diag: typeof diag === "function",
           };
-          if (st && st.enabled !== false && typeof force === "function") {
-            out.force = await force();
-            out.steps.push("forceConvai");
-          } else if (typeof start === "function") {
+          if (typeof diag === "function") {
+            out.diag = await diag();
+            out.steps.push("diag");
+          }
+          if (!out.diag?.convaiConnected && typeof start === "function") {
             out.start = await start();
             out.steps.push("convaiStart");
           }

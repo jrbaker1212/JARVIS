@@ -188,7 +188,7 @@ export default function App() {
     refreshVoiceProfile();
     useStore.getState().setVoicePipeline("convai");
     useStore.getState().setVoiceEnabled(true);
-    void forceConvaiAndStart({ reason: "app-boot" });
+    void startConvaiVoice({ reason: "app-boot" });
     getHealth().then(setHealth).catch(() => undefined);
     const id = setInterval(() => {
       getHealth().then(setHealth).catch(() => undefined);
@@ -209,12 +209,8 @@ export default function App() {
     const tryArm = () => {
       useStore.getState().setVoicePipeline("convai");
       useStore.getState().setVoiceEnabled(true);
-      if ((window as unknown as { jarvis?: unknown }).jarvis) {
-        void forceConvaiAndStart({ reason: "electron-hydrate" });
-      } else if (!useStore.getState().convaiConnected) {
+      if (!useStore.getState().convaiConnected) {
         void startConvaiVoice({ reason: "hydrate" });
-      } else if (useStore.getState().wakeEnabled) {
-        void armMic();
       }
     };
     const unsub = useStore.persist.onFinishHydration(tryArm);
@@ -252,7 +248,9 @@ export default function App() {
       if (visible) {
         console.log("[App] window visible — ws reconnect");
         wsClient.reconnect();
-        void forceConvaiAndStart({ reason: "window-visible" });
+        if (!useStore.getState().convaiConnected) {
+          void startConvaiVoice({ reason: "window-visible" });
+        }
       }
     });
     return () => { offMode?.(); offVis?.(); };

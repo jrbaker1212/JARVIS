@@ -15,6 +15,25 @@ let lastConnectionType: "webrtc" | "websocket" | null = null;
 let sawAgentSpeaking = false;
 let lastOutputDeviceId: string | null = null;
 let lastStartError: string | null = null;
+let lastConvaiError: string | null = null;
+let lastStartAttemptMs = 0;
+let reconnectBackoffMs = 3000;
+const USER_START_REASONS = new Set(["armMic", "console-force", "voice-toggle", "settings"]);
+
+function formatConvaiError(message: unknown): string {
+  if (typeof message === "string") return message;
+  if (message && typeof message === "object") {
+    const o = message as Record<string, unknown>;
+    const parts = [o.message, o.error, o.type, o.code, o.reason].filter(Boolean).map(String);
+    if (parts.length) return parts.join(" — ");
+    try {
+      return JSON.stringify(message);
+    } catch {
+      return "[object]";
+    }
+  }
+  return String(message);
+}
 
 /** Prime Chromium/Electron playback + pin sink before ElevenLabs opens AudioContext. */
 async function unlockConvaiPlayback(sinkId: string): Promise<void> {
@@ -60,8 +79,8 @@ function scheduleReconnect(reason: string) {
   if (reconnectTimer) return;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    void startConvaiVoice({ reason: "auto-reconnect" });
-  }, 2000);
+    void startConvaiVoice({ reason: `auto-reconnect:${reason}` });
+  }, reconnectBackoffMs);
 }
 
 type ConvaiStatus = { ready?: boolean; enabled?: boolean; voice_id?: string };
@@ -109,6 +128,7 @@ function buildSessionCallbacks(sinkId: string) {
         lang: "en-IE",
         tier: "cinematic",
       });
+      reconnectBackoffMs = 3000;
       if (session) void pinConvaiOutput(session, sinkId);
     },
     onDisconnect: () => {
@@ -119,8 +139,12 @@ function buildSessionCallbacks(sinkId: string) {
       scheduleReconnect("disconnect");
     },
     onError: (message: unknown) => {
+      const err = formatConvaiError(message);
+      lastConvaiError = err;
       console.error("[ConvAI] error", message);
-      useStore.getState().setMicStatus(`ConvAI error: ${String(message).slice(0, 80)}`);
+      reportConvaiClient({ event: "error", error: err, raw: message });
+      useStore.getState().setMicStatus(`ConvAI error: ${err.slice(0, 120)}`);
+      reconnectBackoffMs = Math.min(reconnectBackoffMs * 2, 30_000);
     },
     onModeChange: ({ mode }: { mode: string }) => {
       if (mode === "speaking") {
@@ -229,9 +253,22 @@ export async function forceConvaiAndStart(opts?: { reason?: string }) {
   useStore.getState().setVoicePipeline("convai");
   useStore.getState().setVoiceEnabled(true);
   useStore.getState().setWakeEnabled(true);
+  if (useStore.getState().convaiConnected && session) {
+    return {
+      ok: true,
+      connected: true,
+      speaking: sawAgentSpeaking,
+      micStatus: useStore.getState().micStatus,
+      connectionType: lastConnectionType,
+      outputDeviceId: lastOutputDeviceId,
+      lastError: lastConvaiError,
+    };
+  }
   sawAgentSpeaking = false;
   const ok = await startConvaiVoice(opts);
-  if (ok) await new Promise((r) => setTimeout(r, 14000));
+  if (ok && !useStore.getState().convaiConnected) {
+    await new Promise((r) => setTimeout(r, 8000));
+  }
   return {
     ok,
     connected: useStore.getState().convaiConnected,
@@ -239,6 +276,7 @@ export async function forceConvaiAndStart(opts?: { reason?: string }) {
     micStatus: useStore.getState().micStatus,
     connectionType: lastConnectionType,
     outputDeviceId: lastOutputDeviceId,
+    lastError: lastConvaiError,
   };
 }
 
@@ -248,8 +286,28 @@ export async function startConvaiVoice(opts?: { reason?: string }): Promise<bool
     useStore.getState().setMicStatus("Voice muted in UI");
     return false;
   }
-  if (starting || session) return Boolean(session);
+  if (starting) return useStore.getState().convaiConnected;
+  if (session && useStore.getState().convaiConnected) {
+    console.log("[ConvAI] already connected — skip start (%s)", opts?.reason || "");
+    return true;
+  }
+  const reason = opts?.reason || "";
+  const userInitiated = USER_START_REASONS.has(reason) || reason.startsWith("console");
+  const since = Date.now() - lastStartAttemptMs;
+  if (!userInitiated && since < 8000) {
+    console.log("[ConvAI] debounced start (%s)", reason);
+    return useStore.getState().convaiConnected;
+  }
+  if (session && !useStore.getState().convaiConnected) {
+    try {
+      await session.endSession();
+    } catch {
+      /* noop */
+    }
+    session = null;
+  }
 
+  lastStartAttemptMs = Date.now();
   starting = true;
   useStore.getState().setMicStatus("Nexy ConvAI connecting…");
 
@@ -331,6 +389,11 @@ export async function convaiLiveDiag() {
     sawAgentSpeaking,
     sessionLive: convaiSessionLive(),
     lastStartError,
+    lastConvaiError,
     audioElements: audios,
   };
+}
+
+export function getLastConvaiError(): string | null {
+  return lastConvaiError;
 }

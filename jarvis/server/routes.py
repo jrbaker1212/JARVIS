@@ -772,6 +772,33 @@ async def set_persona(request: Request, body: PersonaBody):
     return {"ok": True}
 
 
+@router.get("/convai/last-client-event")
+async def convai_last_client_event(request: Request):
+    """Last ConvAI HUD event written by the renderer (errors, connect, etc.)."""
+    cfg, *_ = _services(request)
+    path = cfg.abs_path("data/convai-live-proof.json")
+    if not path.is_file():
+        return {"ok": False, "error": "no client report yet"}
+    try:
+        return {"ok": True, "report": json.loads(path.read_text(encoding="utf-8"))}
+    except json.JSONDecodeError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@router.post("/convai/client-report")
+async def convai_client_report(request: Request, body: dict):
+    """HUD ConvAI lifecycle events — written for live Electron proof on Ryan's box."""
+    cfg, *_ = _services(request)
+    path = cfg.abs_path("data/convai-live-proof.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"at": __import__("datetime").datetime.utcnow().isoformat() + "Z", **body}
+    try:
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except OSError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    return {"ok": True}
+
+
 @router.get("/convai/status")
 async def convai_status(request: Request):
     from . import convai_helpers as convai

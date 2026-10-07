@@ -24,8 +24,3 @@ patchPersistedStore();
 useStore.getState().setVoicePipeline("convai");
 useStore.getState().setVoiceEnabled(true);
 
-if (typeof window !== "undefined") {
-  queueMicrotask(() => {
-    void import("./convaiVoice").then((m) => m.forceConvaiAndStart({ reason: "voice-boot" }));
-  });
-}
