@@ -496,7 +496,8 @@ export const useStore = create<StoreState>()(persist((set) => ({
     media:        state.media,
     tools:        state.tools,
     swarms:       state.swarms,
-    voiceEnabled: state.voiceEnabled,
+    // Ryan: Nexy must never relaunch with speak-aloud off (root cause of silent HUD).
+    voiceEnabled: true,
     voicePipeline: "convai" as const,
     bargeIn:      state.bargeIn,
     wakeEnabled:  state.wakeEnabled,
@@ -506,11 +507,8 @@ export const useStore = create<StoreState>()(persist((set) => ({
   // resumes across a reload) and strip the lightbox/reader overlays.
   onRehydrateStorage: () => (state) => {
     if (!state) return;
-    // Ryan stack: ConvAI is the only voice path (legacy HTMLAudio TTS retired).
     state.voicePipeline = "convai";
-    if (state.voiceEnabled === false) {
-      state.voiceEnabled = true;
-    }
+    state.voiceEnabled = true;
     if (state.chat?.length) {
       state.chat = dedupeBootGreetings(state.chat.map((c) => ({ ...c, streaming: false })));
     }

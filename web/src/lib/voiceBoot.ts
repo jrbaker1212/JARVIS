@@ -1,8 +1,8 @@
 /**
- * Runs before React mount — force Nexy ConvAI duplex (no legacy Whisper/WS voice).
+ * Before React mount: speak-aloud + ConvAI on (Ryan: Settings TTS off = silent HUD).
  */
+import "./convaiGlobals";
 import { useStore } from "./store";
-import { forceConvaiAndStart } from "./convaiVoice";
 
 const STORE_KEY = "jarvis.store.v1";
 
@@ -26,6 +26,6 @@ useStore.getState().setVoiceEnabled(true);
 
 if (typeof window !== "undefined") {
   queueMicrotask(() => {
-    void forceConvaiAndStart({ reason: "voice-boot" });
+    void import("./convaiVoice").then((m) => m.forceConvaiAndStart({ reason: "voice-boot" }));
   });
 }

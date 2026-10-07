@@ -222,6 +222,18 @@ export default function App() {
     return unsub;
   }, []);
 
+  // When speak-aloud is enabled, ensure ConvAI duplex is running (not just unmuted in UI).
+  useEffect(() => {
+    let wasOn = useStore.getState().voiceEnabled;
+    return useStore.subscribe((st) => {
+      if (st.voicePipeline === "legacy") return;
+      if (st.voiceEnabled && !wasOn && !st.convaiConnected) {
+        void startConvaiVoice({ reason: "voice-enabled" });
+      }
+      wasOn = st.voiceEnabled;
+    });
+  }, []);
+
   // ── Electron integration: track shell mode + window visibility ──────────
   useEffect(() => {
     const j = (window as any).jarvis;

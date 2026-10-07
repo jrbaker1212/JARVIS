@@ -79,7 +79,7 @@ export default function Settings({
             Status: {convaiConnected ? "connected" : "offline"} {micStatus ? `· ${micStatus}` : ""}
           </div>
           <Toggle
-            label="JARVIS speaks aloud (TTS)"
+            label="JARVIS speaks aloud (TTS) — always on after relaunch"
             value={voiceEnabled}
             onChange={(v) => {
               setVoiceEnabled(v);
