@@ -6,8 +6,6 @@ import { Conversation } from "@elevenlabs/client";
 import { nextId, useStore } from "./store";
 import { grantXboxMicPermissionForLabels, mic, resolveConvaiXboxDevices } from "./voice";
 
-const IRISH_VOICE_ID = "sgk995upfe3tYLvoGcBN";
-
 let session: Conversation | null = null;
 let starting = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -20,25 +18,58 @@ let lastStartAttemptMs = 0;
 let reconnectBackoffMs = 3000;
 let sessionEpoch = 0;
 let pendingErrorTimer: ReturnType<typeof setTimeout> | null = null;
+let startInFlight: Promise<boolean> | null = null;
+let lastElevenLabsErrorContext: Record<string, unknown> | null = null;
 const USER_START_REASONS = new Set(["armMic", "console-force", "voice-toggle", "settings"]);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function formatConvaiError(message: unknown): string {
-  if (typeof message === "string") return message;
-  if (message && typeof message === "object") {
-    const o = message as Record<string, unknown>;
-    const parts = [o.message, o.error, o.type, o.code, o.reason].filter(Boolean).map(String);
-    if (parts.length) return parts.join(" — ");
+type ConvaiErrorContext = {
+  errorType?: string;
+  code?: string | number;
+  debugMessage?: string;
+  details?: unknown;
+};
+
+function formatConvaiError(message: unknown, context?: ConvaiErrorContext): string {
+  const ctxParts: string[] = [];
+  if (context?.errorType) ctxParts.push(`type=${context.errorType}`);
+  if (context?.code != null && context.code !== "") ctxParts.push(`code=${context.code}`);
+  if (context?.debugMessage) ctxParts.push(String(context.debugMessage));
+  if (context?.details != null) {
     try {
-      return JSON.stringify(message);
+      ctxParts.push(typeof context.details === "string" ? context.details : JSON.stringify(context.details));
     } catch {
-      return "[object]";
+      ctxParts.push("[details]");
     }
   }
-  return String(message);
+
+  let base = "";
+  if (typeof message === "string") base = message;
+  else if (message && typeof message === "object") {
+    const o = message as Record<string, unknown>;
+    const parts = [o.message, o.error, o.type, o.code, o.reason].filter(Boolean).map(String);
+    base = parts.length ? parts.join(" — ") : "";
+    if (!base) {
+      try {
+        base = JSON.stringify(message);
+      } catch {
+        base = "[object]";
+      }
+    }
+  } else base = String(message);
+
+  if (ctxParts.length) return `${base} (${ctxParts.join("; ")})`;
+  return base;
+}
+
+function clearReconnectTimer(): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
 }
 
 /** Prime Chromium/Electron playback + pin sink before ElevenLabs opens AudioContext. */
@@ -82,6 +113,7 @@ export function convaiSessionLive(): boolean {
 
 function scheduleReconnect(reason: string) {
   if (!isConvaiActive() || !useStore.getState().voiceEnabled) return;
+  if (starting || startInFlight) return;
   if (reconnectTimer) return;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
@@ -154,19 +186,32 @@ function buildSessionCallbacks(sinkId: string, epoch: number) {
       useStore.getState().setMicStatus("Nexy voice reconnecting…");
       scheduleReconnect("disconnect");
     },
-    onError: (message: unknown) => {
+    onError: (message: unknown, context?: ConvaiErrorContext) => {
       if (epoch !== sessionEpoch) return;
-      const err = formatConvaiError(message);
+      lastElevenLabsErrorContext = context ? { ...context } : null;
+      const err = formatConvaiError(message, context);
       lastConvaiError = err;
-      console.error("[ConvAI] error", message);
-      reportConvaiClient({ event: "error", error: err, raw: message });
+      console.error("[ConvAI] error", message, context);
+      reportConvaiClient({
+        event: "error",
+        error: err,
+        rawMessage: message,
+        elevenLabs: context ?? null,
+      });
       reconnectBackoffMs = Math.min(reconnectBackoffMs * 2, 30_000);
       if (pendingErrorTimer) clearTimeout(pendingErrorTimer);
       pendingErrorTimer = setTimeout(() => {
         pendingErrorTimer = null;
         if (epoch !== sessionEpoch || useStore.getState().convaiConnected) return;
-        useStore.getState().setMicStatus(`ConvAI error: ${err.slice(0, 120)}`);
+        useStore.getState().setMicStatus(`ConvAI error: ${err.slice(0, 160)}`);
       }, 2800);
+    },
+    onDebug: (parsedEvent: unknown) => {
+      if (epoch !== sessionEpoch) return;
+      const ev = parsedEvent as { type?: string; error_event?: Record<string, unknown> };
+      if (ev?.type === "error" && ev.error_event) {
+        reportConvaiClient({ event: "debug_error_event", error_event: ev.error_event });
+      }
     },
     onModeChange: ({ mode }: { mode: string }) => {
       if (epoch !== sessionEpoch) return;
@@ -207,10 +252,7 @@ async function openConvaiSession(
   xbox: { micId: string; sinkId?: string; micLabel?: string; sinkLabel?: string },
   opts?: { reason?: string },
 ): Promise<Conversation> {
-  // Agent firstMessage/language live on server — overrides here caused ElevenLabs "Server error: Unknown error".
-  const overrides = {
-    tts: { voiceId: status.voice_id || IRISH_VOICE_ID },
-  };
+  // Voice + language live on the ElevenLabs agent — client overrides caused empty server error events.
   const sessionOpts: {
     textOnly: false;
     inputDeviceId: string;
@@ -223,16 +265,26 @@ async function openConvaiSession(
   const callbacks = buildSessionCallbacks(sessionOpts.outputDeviceId || xbox.sinkId || "", epoch);
 
   const tokenResp = await fetch("/api/convai/conversation-token");
+  const tokenStatus = tokenResp.status;
   if (!tokenResp.ok) {
-    throw new Error(`token HTTP ${tokenResp.status}`);
+    const body = await tokenResp.text().catch(() => "");
+    throw new Error(`ElevenLabs token proxy HTTP ${tokenStatus}: ${body.slice(0, 200)}`);
   }
   const { token } = (await tokenResp.json()) as { token?: string };
-  if (!token) throw new Error("missing conversation token");
+  if (!token) throw new Error(`ElevenLabs token proxy HTTP ${tokenStatus}: missing token field`);
+
+  reportConvaiClient({
+    event: "token_ok",
+    httpStatus: tokenStatus,
+    tokenLen: token.length,
+    reason: opts?.reason,
+  });
 
   console.log(
-    "[ConvAI] startSession voice Xbox in=%s out=%s (%s)",
+    "[ConvAI] startSession voice Xbox in=%s out=%s tokenHTTP=%s (%s)",
     xbox.micLabel,
     xbox.sinkLabel,
+    tokenStatus,
     opts?.reason || "user",
   );
 
@@ -242,7 +294,6 @@ async function openConvaiSession(
       conversationToken: token,
       connectionType: "webrtc",
       ...sessionOpts,
-      overrides: overrides as never,
       ...callbacks,
     });
     const voiceConv = conv as Conversation & { setVolume?: (v: { volume: number }) => void };
@@ -253,16 +304,19 @@ async function openConvaiSession(
   }
 
   const urlResp = await fetch("/api/convai/signed-url");
-  if (!urlResp.ok) throw new Error(`signed-url HTTP ${urlResp.status}`);
+  const signedHttp = urlResp.status;
+  if (!urlResp.ok) {
+    const body = await urlResp.text().catch(() => "");
+    throw new Error(`ElevenLabs signed-url proxy HTTP ${signedHttp}: ${body.slice(0, 200)}`);
+  }
   const { signed_url: signedUrl } = (await urlResp.json()) as { signed_url?: string };
-  if (!signedUrl) throw new Error("missing signed_url");
+  if (!signedUrl) throw new Error(`ElevenLabs signed-url proxy HTTP ${signedHttp}: missing signed_url`);
 
   lastConnectionType = "websocket";
   const conv = await Conversation.startSession({
     signedUrl,
     connectionType: "websocket",
     ...sessionOpts,
-    overrides: overrides as never,
     ...callbacks,
   });
   const voiceConv = conv as Conversation & { setVolume?: (v: { volume: number }) => void };
@@ -302,6 +356,14 @@ export async function forceConvaiAndStart(opts?: { reason?: string }) {
 }
 
 export async function startConvaiVoice(opts?: { reason?: string }): Promise<boolean> {
+  if (startInFlight) return startInFlight;
+  startInFlight = startConvaiVoiceInner(opts).finally(() => {
+    startInFlight = null;
+  });
+  return startInFlight;
+}
+
+async function startConvaiVoiceInner(opts?: { reason?: string }): Promise<boolean> {
   useStore.getState().setVoicePipeline("convai");
   if (!useStore.getState().voiceEnabled) {
     useStore.getState().setMicStatus("Voice muted in UI");
@@ -329,6 +391,7 @@ export async function startConvaiVoice(opts?: { reason?: string }): Promise<bool
     await sleep(450);
   }
 
+  clearReconnectTimer();
   sessionEpoch += 1;
   lastStartAttemptMs = Date.now();
   starting = true;
@@ -419,6 +482,7 @@ export async function convaiLiveDiag() {
     sessionLive: convaiSessionLive(),
     lastStartError,
     lastConvaiError,
+    lastElevenLabsErrorContext,
     audioElements: audios,
   };
 }

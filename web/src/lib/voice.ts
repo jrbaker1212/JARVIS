@@ -220,6 +220,42 @@ export { ensureXboxDevicesResolved };
 /** ConvAI needs a real mic deviceId from an open Xbox track; sink may use concrete id or OS default. */
 export async function resolveConvaiXboxDevices(): Promise<XboxAudioDevices> {
   await grantXboxMicPermissionForLabels();
+  if (!navigator.mediaDevices?.enumerateDevices) {
+    lastXboxAudio = { ok: false, refused: ["enumerateDevices unavailable"] };
+    return lastXboxAudio;
+  }
+
+  const cache = loadXboxAudioCache();
+  const cacheFresh =
+    Boolean(cache.micId && cache.sinkId && isConcreteDeviceId(cache.micId) && isConcreteDeviceId(cache.sinkId)) &&
+    typeof cache.savedAt === "number" &&
+    Date.now() - cache.savedAt < 7 * 24 * 60 * 60 * 1000;
+
+  let devices = await navigator.mediaDevices.enumerateDevices();
+  if (cacheFresh) {
+    const micDev = devices.find((d) => d.kind === "audioinput" && d.deviceId === cache.micId);
+    const sinkDev = devices.find((d) => d.kind === "audiooutput" && d.deviceId === cache.sinkId);
+    if (
+      micDev &&
+      sinkDev &&
+      trackLabelIsXboxMic(micDev.label) &&
+      /headphones\s*\(\s*xbox\s*controller\s*\)/i.test(sinkDev.label)
+    ) {
+      lastXboxAudio = {
+        micId: cache.micId,
+        sinkId: cache.sinkId,
+        micLabel: micDev.label,
+        sinkLabel: sinkDev.label,
+        ok: true,
+      };
+      const st = useStore.getState();
+      if (!st.convaiConnected && !st.micStatus.startsWith("Nexy connected")) {
+        st.setMicStatus(`ConvAI Xbox: ${sinkDev.label} / ${micDev.label}`);
+      }
+      return lastXboxAudio;
+    }
+  }
+
   if (!navigator.mediaDevices?.getUserMedia) {
     lastXboxAudio = { ok: false, refused: ["getUserMedia unavailable"] };
     return lastXboxAudio;
@@ -230,7 +266,6 @@ export async function resolveConvaiXboxDevices(): Promise<XboxAudioDevices> {
     noiseSuppression: true,
     autoGainControl: true,
   };
-  const cache = loadXboxAudioCache();
   let stream: MediaStream;
   try {
     if (cache.micId && isConcreteDeviceId(cache.micId)) {
@@ -258,7 +293,7 @@ export async function resolveConvaiXboxDevices(): Promise<XboxAudioDevices> {
   const micId = track.getSettings().deviceId || track.id;
   stream.getTracks().forEach((t) => t.stop());
 
-  const devices = await navigator.mediaDevices.enumerateDevices();
+  devices = await navigator.mediaDevices.enumerateDevices();
   const sink =
     devices.find(
       (d) =>

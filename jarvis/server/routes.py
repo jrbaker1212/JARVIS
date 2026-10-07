@@ -809,6 +809,18 @@ async def convai_status(request: Request):
     return st
 
 
+@router.get("/convai/elevenlabs-probe")
+async def convai_elevenlabs_probe(request: Request):
+    """Exact ElevenLabs REST HTTP status for token, agent, signed-url (not LiveKit/WebRTC)."""
+    from . import convai_helpers as convai
+
+    cfg, *_ = _services(request)
+    try:
+        return await asyncio.to_thread(convai.probe_elevenlabs, cfg)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
 @router.post("/convai/ensure-agent")
 async def convai_ensure_agent(request: Request):
     from . import convai_helpers as convai

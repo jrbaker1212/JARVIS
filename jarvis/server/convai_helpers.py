@@ -137,6 +137,87 @@ def fetch_conversation_token(cfg, agent_id: str | None = None) -> str:
     return token
 
 
+def probe_elevenlabs(cfg) -> dict[str, Any]:
+    """Live HTTP probe — exact status codes for Ryan diagnostics (not the WebRTC data-channel)."""
+    api_key = _api_key(cfg)
+    aid = resolve_agent_id(cfg) or None
+    out: dict[str, Any] = {
+        "api_key_set": bool(api_key),
+        "agent_id": aid,
+        "checks": {},
+    }
+    if not api_key:
+        out["ready"] = False
+        return out
+
+    with httpx.Client(timeout=30.0) as client:
+        headers = {"xi-api-key": api_key}
+
+        if aid:
+            agent_url = f"https://api.elevenlabs.io/v1/convai/agents/{aid}"
+            r_agent = client.get(agent_url, headers=headers)
+            body_preview = (r_agent.text or "")[:400]
+            out["checks"]["agent_get"] = {
+                "url": agent_url,
+                "http_status": r_agent.status_code,
+                "ok": r_agent.is_success,
+                "body_preview": body_preview,
+            }
+            if r_agent.is_success:
+                try:
+                    agent_body = r_agent.json()
+                    cc = agent_body.get("conversation_config") or {}
+                    out["checks"]["agent_get"]["tts_model_id"] = (cc.get("tts") or {}).get("model_id")
+                    out["checks"]["agent_get"]["language"] = (cc.get("agent") or {}).get("language")
+                except json.JSONDecodeError:
+                    pass
+
+            token_url = "https://api.elevenlabs.io/v1/convai/conversation/token"
+            r_token = client.get(token_url, params={"agent_id": aid}, headers=headers)
+            token_preview = ""
+            if r_token.is_success:
+                try:
+                    tok = str(r_token.json().get("token") or "")
+                    token_preview = f"len={len(tok)} prefix={tok[:24]}…" if tok else "empty"
+                except json.JSONDecodeError:
+                    token_preview = "invalid-json"
+            else:
+                token_preview = (r_token.text or "")[:200]
+            out["checks"]["conversation_token"] = {
+                "url": token_url,
+                "http_status": r_token.status_code,
+                "ok": r_token.is_success,
+                "detail": token_preview,
+            }
+
+            signed_url = "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url"
+            r_signed = client.get(signed_url, params={"agent_id": aid}, headers=headers)
+            signed_preview = ""
+            if r_signed.is_success:
+                try:
+                    su = str(r_signed.json().get("signed_url") or "")
+                    signed_preview = f"len={len(su)}" if su else "empty"
+                except json.JSONDecodeError:
+                    signed_preview = "invalid-json"
+            else:
+                signed_preview = (r_signed.text or "")[:200]
+            out["checks"]["signed_url"] = {
+                "url": signed_url,
+                "http_status": r_signed.status_code,
+                "ok": r_signed.is_success,
+                "detail": signed_preview,
+            }
+        else:
+            out["checks"]["agent_get"] = {"skipped": "no agent_id"}
+
+    out["ready"] = all(
+        c.get("ok") is True
+        for k, c in out["checks"].items()
+        if k in ("agent_get", "conversation_token", "signed_url")
+    )
+    return out
+
+
 def fetch_signed_url(cfg, agent_id: str | None = None) -> str:
     api_key = _api_key(cfg)
     if not api_key:
