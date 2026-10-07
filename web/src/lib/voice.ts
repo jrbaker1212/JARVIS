@@ -106,6 +106,21 @@ function deviceAllowed(d: MediaDeviceInfo): boolean {
   return !BLOCKED_AUDIO_RE.test(d.label);
 }
 
+const PSEUDO_DEVICE_IDS = new Set(["default", "communications"]);
+
+function isConcreteDeviceId(id?: string): boolean {
+  return Boolean(id && !PSEUDO_DEVICE_IDS.has(id));
+}
+
+/** Prefer real endpoint ids — setSinkId("default") is flaky across consecutive HTMLAudio plays. */
+function pickBestDevice(candidates: MediaDeviceInfo[]): MediaDeviceInfo | undefined {
+  if (!candidates.length) return undefined;
+  const concrete = candidates.find(
+    (d) => isConcreteDeviceId(d.deviceId) && !/^default\s[-–]/i.test(d.label),
+  );
+  return concrete ?? candidates.find((d) => isConcreteDeviceId(d.deviceId)) ?? candidates[0];
+}
+
 function labelMatchesForced(label: string, kind: "audioinput" | "audiooutput"): boolean {
   const target =
     kind === "audioinput"
@@ -127,39 +142,73 @@ async function loadForcedAudioHints(): Promise<void> {
   }
 }
 
+function trackLabelIsXboxMic(label: string): boolean {
+  if (!label || BLOCKED_AUDIO_RE.test(label)) return false;
+  return (
+    /headset\s*microphone\s*\(\s*xbox\s*controller\s*\)/i.test(label) ||
+    labelMatchesForced(label, "audioinput") ||
+    XBOX_MIC_RE.test(label)
+  );
+}
+
+/**
+ * Cold-boot fix: Chromium hides device labels until getUserMedia succeeds once.
+ * Old code refused getUserMedia until Xbox ids were already known — mic/TTS never started.
+ * Opens Xbox mic only; verifies track label; never leaves fifine/other devices active.
+ */
+async function grantXboxMicPermissionForLabels(): Promise<boolean> {
+  await loadForcedAudioHints();
+  if (!navigator.mediaDevices?.getUserMedia) return false;
+
+  const cache = loadXboxAudioCache();
+  const baseAudio: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+
+  const tryOpen = async (constraints: MediaStreamConstraints): Promise<boolean> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const label = stream.getAudioTracks()[0]?.label || "";
+      stream.getTracks().forEach((t) => t.stop());
+      if (!trackLabelIsXboxMic(label)) {
+        console.error("[TTS:audio] refused non-Xbox mic stream:", label || "(no label)");
+        return false;
+      }
+      console.log("[TTS:audio] Xbox mic permission ok — label=%s", label);
+      return true;
+    } catch (e) {
+      console.warn("[TTS:audio] getUserMedia failed", e);
+      return false;
+    }
+  };
+
+  if (cache.micId) {
+    const ok = await tryOpen({ audio: { ...baseAudio, deviceId: { exact: cache.micId } } });
+    if (ok) return true;
+  }
+
+  // No cache / stale cache: one permission prompt. Ryan's Windows default recording
+  // device is Xbox; we still verify the track label before accepting.
+  return tryOpen({ audio: baseAudio });
+}
+
 /** Brief Xbox mic open so Chromium exposes output deviceIds (post-reboot). */
 async function primeXboxDeviceLabels(): Promise<void> {
-  await loadForcedAudioHints();
-  const cache = loadXboxAudioCache();
-  let micId = cache.micId || lastXboxAudio.micId;
-  if (!micId && navigator.mediaDevices?.enumerateDevices) {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const mic = devices.find(
-      (d) =>
-        d.kind === "audioinput" &&
-        deviceAllowed(d) &&
-        (labelMatchesForced(d.label, "audioinput") || XBOX_MIC_RE.test(d.label)),
-    );
-    micId = mic?.deviceId;
+  await grantXboxMicPermissionForLabels();
+}
+
+/** Resolve Xbox mic + headphones; grant permission first when labels are hidden. */
+async function ensureXboxDevicesResolved(): Promise<XboxAudioDevices> {
+  let x = await resolveXboxAudioDevices();
+  if (x.ok && x.micId && x.sinkId) return x;
+  // Mic already open for STT — re-opening getUserMedia fails; enumerate still works.
+  if (!useStore.getState().micEnabled) {
+    await grantXboxMicPermissionForLabels();
   }
-  if (!micId) {
-    console.warn("[TTS:audio] prime skipped — no Xbox mic id yet (arm mic once)");
-    return;
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: { exact: micId },
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
-    stream.getTracks().forEach((t) => t.stop());
-    console.log("[TTS:audio] primed device labels via Xbox mic");
-  } catch (e) {
-    console.warn("[TTS:audio] prime getUserMedia failed", e);
-  }
+  x = await resolveXboxAudioDevices();
+  return x;
 }
 
 export function getActiveXboxAudio(): XboxAudioDevices {
@@ -200,37 +249,30 @@ async function resolveXboxAudioDevices(): Promise<XboxAudioDevices> {
       .filter((d) => (d.kind === "audioinput" || d.kind === "audiooutput") && d.label && BLOCKED_AUDIO_RE.test(d.label))
       .map((d) => `${d.kind}:${d.label}`);
 
-    const pickMic = (): MediaDeviceInfo | undefined =>
-      devices.find(
-        (d) => d.kind === "audioinput" && /headset\s*microphone\s*\(\s*xbox\s*controller\s*\)/i.test(d.label),
-      ) ||
-      devices.find(
-        (d) => d.kind === "audioinput" && labelMatchesForced(d.label, "audioinput") && deviceAllowed(d),
-      ) ||
-      devices.find((d) => d.kind === "audioinput" && XBOX_MIC_RE.test(d.label) && deviceAllowed(d)) ||
-      (cache.micId
+    const xboxMicCandidates = devices.filter(
+      (d) =>
+        d.kind === "audioinput" &&
+        deviceAllowed(d) &&
+        (/headset\s*microphone\s*\(\s*xbox\s*controller\s*\)/i.test(d.label) ||
+          labelMatchesForced(d.label, "audioinput") ||
+          XBOX_MIC_RE.test(d.label)),
+    );
+    const xboxSinkCandidates = devices.filter(
+      (d) =>
+        d.kind === "audiooutput" &&
+        deviceAllowed(d) &&
+        (XBOX_PLAY_RE.test(d.label) || labelMatchesForced(d.label, "audiooutput")),
+    );
+
+    let mic =
+      (cache.micId && isConcreteDeviceId(cache.micId)
         ? devices.find((d) => d.kind === "audioinput" && d.deviceId === cache.micId && deviceAllowed(d))
-        : undefined);
+        : undefined) || pickBestDevice(xboxMicCandidates);
 
-    let mic = pickMic();
-
-    const pickSink = (groupId?: string): MediaDeviceInfo | undefined =>
-      devices.find(
-        (d) => d.kind === "audiooutput" && XBOX_PLAY_RE.test(d.label) && deviceAllowed(d),
-      ) ||
-      devices.find(
-        (d) => d.kind === "audiooutput" && labelMatchesForced(d.label, "audiooutput") && deviceAllowed(d),
-      ) ||
-      (groupId
-        ? devices.find(
-            (d) => d.kind === "audiooutput" && d.groupId === groupId && deviceAllowed(d) && d.deviceId !== "default",
-          )
-        : undefined) ||
-      (cache.sinkId
+    let sink =
+      (cache.sinkId && isConcreteDeviceId(cache.sinkId)
         ? devices.find((d) => d.kind === "audiooutput" && d.deviceId === cache.sinkId && deviceAllowed(d))
-        : undefined);
-
-    let sink = pickSink(mic?.groupId);
+        : undefined) || pickBestDevice(xboxSinkCandidates);
 
     const ok = Boolean(mic?.deviceId && sink?.deviceId);
     lastXboxAudio = {
@@ -241,7 +283,9 @@ async function resolveXboxAudioDevices(): Promise<XboxAudioDevices> {
       refused,
       ok,
     };
-    if (ok) saveXboxAudioCache(mic!.deviceId, sink!.deviceId);
+    if (ok && isConcreteDeviceId(mic!.deviceId) && isConcreteDeviceId(sink!.deviceId)) {
+      saveXboxAudioCache(mic!.deviceId, sink!.deviceId);
+    }
     console.log(
       "[TTS:audio] Xbox pin ok=%s mic=%s sink=%s refused=%d",
       ok,
@@ -260,31 +304,28 @@ async function resolveXboxAudioDevices(): Promise<XboxAudioDevices> {
   }
 }
 
-async function pinPlayerSink(sinkId?: string): Promise<void> {
-  if (!playerAudio || !sinkId) return;
+async function pinPlayerSink(sinkId?: string): Promise<boolean> {
+  if (!playerAudio || !sinkId) return false;
   const anyAudio = playerAudio as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
-  if (typeof anyAudio.setSinkId !== "function") return;
+  if (typeof anyAudio.setSinkId !== "function") return true;
   try {
     await anyAudio.setSinkId(sinkId);
-    console.log("[TTS:audio] playerAudio sink pinned");
+    console.log("[TTS:audio] playerAudio sink pinned ->", sinkId.slice(0, 12));
+    return true;
   } catch (e) {
     console.warn("[TTS:audio] setSinkId failed", e);
+    return false;
   }
 }
 
 /** Resolve Xbox output and pin the shared player — must finish before play(). */
 async function ensurePlayerSinkPinned(): Promise<boolean> {
-  let x = await resolveXboxAudioDevices();
-  if (!x.sinkId) {
-    await primeXboxDeviceLabels();
-    x = await resolveXboxAudioDevices();
-  }
+  const x = await ensureXboxDevicesResolved();
   if (!x.sinkId) {
     console.error("[TTS:audio] Xbox headphones not found — refusing default-sink playback");
     return false;
   }
-  await pinPlayerSink(x.sinkId);
-  return true;
+  return pinPlayerSink(x.sinkId);
 }
 
 const streamState = { id: "", spokenChars: 0 };
@@ -413,8 +454,15 @@ export function streamSpeak(id: string, fullText: string, isFinal: boolean): voi
 
   // New message â†’ reset queue + state so we don't blend two answers.
   if (id !== streamState.id) {
-    console.log("[TTS:stream] NEW message id=%s â†’ cancel previous (was %s)", id, streamState.id);
-    cancelStreamingTts();
+    const busy = ttsPlaying || ttsQueue.length > 0 || pendingFetches > 0;
+    if (busy) {
+      console.log("[TTS:stream] NEW message id=%s â†’ cancel previous (was %s)", id, streamState.id);
+      cancelStreamingTts();
+    } else {
+      console.log("[TTS:stream] NEW message id=%s idle handoff (was %s)", id, streamState.id);
+      streamState.spokenChars = 0;
+      recentSegmentKeys.clear();
+    }
     streamState.id = id;
     streamState.spokenChars = 0;
   }
@@ -523,6 +571,18 @@ function enqueueAudio(blob: Blob, gen: number): void {
 }
 
 function releaseActive() {
+  if (playerAudio && activeUrl) {
+    try {
+      const src = playerAudio.currentSrc || playerAudio.src || "";
+      if (src === activeUrl || src.includes(activeUrl)) {
+        playerAudio.pause();
+        playerAudio.removeAttribute("src");
+        playerAudio.load();
+      }
+    } catch {
+      /* noop */
+    }
+  }
   if (activeUrl) {
     try { URL.revokeObjectURL(activeUrl); } catch { /* noop */ }
     activeUrl = null;
@@ -618,6 +678,19 @@ async function playNextAsync(): Promise<void> {
     playerAudio.load();
   } catch {
     /* noop */
+  }
+  // Chromium can reset output route on src/load — re-pin every clip.
+  const pinnedAfterLoad = await pinPlayerSink(lastXboxAudio.sinkId);
+  if (!pinnedAfterLoad) {
+    console.warn("[TTS:play] sink re-pin after load failed — dropping clip");
+    try {
+      URL.revokeObjectURL(next.url);
+    } catch {
+      /* noop */
+    }
+    ttsPlaying = false;
+    playNext();
+    return;
   }
   try {
     await playerAudio.play();
@@ -913,30 +986,38 @@ export class JarvisMic {
       // JARVIS's own TTS out of the mic signal so we don't transcribe
       // ourselves or false-trigger the interrupt detector.
       // HARD RULE: Xbox Controller headset mic ONLY — never fifine / other defaults.
-      const xbox = await resolveXboxAudioDevices();
+      const xbox = await ensureXboxDevicesResolved();
       const audioConstraints: MediaTrackConstraints = {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
       };
       if (xbox.micId) {
         audioConstraints.deviceId = { exact: xbox.micId };
-        console.log("[STT] pinning mic to", xbox.micLabel);
+        console.log("[STT] pinning mic to", xbox.micLabel || xbox.micId);
       } else {
         console.warn("[STT] Xbox Controller mic not found — refusing non-Xbox fallback");
-        useStore.getState().setMicStatus("Xbox mic missing");
-        return;
-      }
-      if (!xbox.sinkId) {
-        console.warn("[STT] Xbox Headphones sink not found — refusing non-Xbox output");
-        useStore.getState().setMicStatus("Xbox headphones missing");
+        useStore.getState().setMicStatus("Xbox mic missing — allow mic for Xbox headset");
         return;
       }
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
       });
-      await pinPlayerSink(xbox.sinkId);
-      useStore.getState().setMicStatus(`Xbox active: ${xbox.sinkLabel} + ${xbox.micLabel}`);
+      const liveMicLabel = this.stream.getAudioTracks()[0]?.label || "";
+      if (!trackLabelIsXboxMic(liveMicLabel)) {
+        console.error("[STT] live mic is not Xbox — stopping", liveMicLabel);
+        this.stream.getTracks().forEach((t) => t.stop());
+        this.stream = null;
+        useStore.getState().setMicStatus("Refused non-Xbox mic");
+        return;
+      }
+      if (xbox.sinkId) {
+        await pinPlayerSink(xbox.sinkId);
+        useStore.getState().setMicStatus(`Xbox active: ${xbox.sinkLabel} + ${xbox.micLabel || liveMicLabel}`);
+      } else {
+        console.warn("[STT] Xbox headphones sink not found — STT on; TTS blocked until sink resolves");
+        useStore.getState().setMicStatus(`Xbox mic ok; headphones missing for TTS`);
+      }
     } catch (e) {
       console.warn("getUserMedia denied", e);
       useStore.getState().setMicStatus("mic blocked");
@@ -1244,6 +1325,7 @@ export async function unlockHudAudio(): Promise<void> {
       playerAudio.muted = false;
       playerAudio.volume = 1.0;
     }
+    await ensureXboxDevicesResolved();
     await ensurePlayerSinkPinned();
     const silent = new Audio(
       "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA",
@@ -1262,9 +1344,15 @@ export async function unlockHudAudio(): Promise<void> {
 }
 
 if (typeof window !== "undefined") {
-  (window as unknown as { __jarvisSpeak?: (t: string) => void; __jarvisUnlockAudio?: () => Promise<void> }).__jarvisSpeak = (t: string) => {
+  (window as unknown as {
+    __jarvisSpeak?: (t: string) => void;
+    __jarvisUnlockAudio?: () => Promise<void>;
+    __jarvisEnsureXboxAudio?: () => Promise<XboxAudioDevices>;
+  }).__jarvisSpeak = (t: string) => {
     try { useStore.getState().setVoiceEnabled(true); } catch { /* noop */ }
     void unlockHudAudio().finally(() => speak(t));
   };
   (window as unknown as { __jarvisUnlockAudio?: () => Promise<void> }).__jarvisUnlockAudio = unlockHudAudio;
+  (window as unknown as { __jarvisEnsureXboxAudio?: () => Promise<XboxAudioDevices> }).__jarvisEnsureXboxAudio =
+    ensureXboxDevicesResolved;
 }
