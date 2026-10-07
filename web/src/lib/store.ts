@@ -200,6 +200,11 @@ interface StoreState {
   // voice
   voiceEnabled: boolean;
   setVoiceEnabled: (v: boolean) => void;
+  /** convai = ElevenLabs Conversational AI duplex; legacy = HTMLAudio + /api/tts */
+  voicePipeline: "convai" | "legacy";
+  setVoicePipeline: (p: StoreState["voicePipeline"]) => void;
+  convaiConnected: boolean;
+  setConvaiConnected: (v: boolean) => void;
   // Full-duplex barge-in: let the user cut JARVIS off mid-sentence by talking.
   bargeIn: boolean;
   setBargeIn: (v: boolean) => void;
@@ -339,6 +344,10 @@ export const useStore = create<StoreState>()(persist((set) => ({
   setHealth: (h) => set({ health: h }),
   voiceEnabled: true,
   setVoiceEnabled: (v) => set({ voiceEnabled: v }),
+  voicePipeline: "convai",
+  setVoicePipeline: (p) => set({ voicePipeline: p }),
+  convaiConnected: false,
+  setConvaiConnected: (v) => set({ convaiConnected: v }),
   bargeIn: true,
   setBargeIn: (v) => set({ bargeIn: v }),
   voiceProfile: null,
@@ -488,6 +497,7 @@ export const useStore = create<StoreState>()(persist((set) => ({
     tools:        state.tools,
     swarms:       state.swarms,
     voiceEnabled: state.voiceEnabled,
+    voicePipeline: state.voicePipeline,
     bargeIn:      state.bargeIn,
     wakeEnabled:  state.wakeEnabled,
     shellMode:    state.shellMode,

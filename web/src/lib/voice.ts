@@ -215,6 +215,8 @@ export function getActiveXboxAudio(): XboxAudioDevices {
   return lastXboxAudio;
 }
 
+export { ensureXboxDevicesResolved };
+
 /** Public filtered device list — Xbox only. Never surfaces blocked devices. */
 export async function listAllowedAudioDevices(): Promise<{
   inputs: { deviceId: string; label: string }[];
@@ -426,6 +428,10 @@ async function speakWithServerTts(clean: string): Promise<boolean> {
 }
 
 export function speak(text: string): void {
+  if (useStore.getState().voicePipeline === "convai") {
+    console.log("[TTS] legacy speak skipped (ConvAI active)");
+    return;
+  }
   // Route ALL one-shot announcements through the streaming queue + single
   // shared HTMLAudioElement. The old path created a second Audio() via
   // speakWithServerTts and fell back to browser SpeechSynthesis (robot voice),
@@ -447,6 +453,9 @@ export function speak(text: string): void {
 // for synthesis. On `isFinal`, flushes any trailing fragment too.
 // Audio segments play strictly in order; later segments wait their turn.
 export function streamSpeak(id: string, fullText: string, isFinal: boolean): void {
+  if (useStore.getState().voicePipeline === "convai") {
+    return;
+  }
   if (!useStore.getState().voiceEnabled) {
     console.log("[TTS:stream] voice disabled, skip");
     return;

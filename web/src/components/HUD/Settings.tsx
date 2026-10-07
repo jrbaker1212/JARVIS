@@ -8,12 +8,26 @@
  */
 import { useEffect, useState } from "react";
 import { useStore } from "../../lib/store";
-import { resetAllLayouts } from "./Floating";
+import { armMic, disarmMic } from "../../lib/micControl";
+import { startConvaiVoice, stopConvaiVoice } from "../../lib/convaiVoice";
+import {
+  panelLabel,
+  resetAllLayouts,
+  useHiddenPanelIds,
+} from "./Floating";
 
-export default function Settings() {
+export default function Settings({
+  onRestorePanel,
+}: {
+  onRestorePanel?: (id: string) => void;
+}) {
   const health = useStore((s) => s.health);
   const voiceEnabled = useStore((s) => s.voiceEnabled);
   const setVoiceEnabled = useStore((s) => s.setVoiceEnabled);
+  const voicePipeline = useStore((s) => s.voicePipeline);
+  const setVoicePipeline = useStore((s) => s.setVoicePipeline);
+  const convaiConnected = useStore((s) => s.convaiConnected);
+  const micStatus = useStore((s) => s.micStatus);
   const wakeEnabled = useStore((s) => s.wakeEnabled);
   const setWakeEnabled = useStore((s) => s.setWakeEnabled);
   const bargeIn = useStore((s) => s.bargeIn);
@@ -24,6 +38,8 @@ export default function Settings() {
   const setReader = useStore((s) => s.setReader);
   const prevSessionAvailable = useStore((s) => s.prevSessionAvailable);
   const restoreLastSession = useStore((s) => s.restoreLastSession);
+
+  const hiddenPanels = useHiddenPanelIds();
 
   const [agents, setAgents] = useState<string[]>([]);
   useEffect(() => {
@@ -59,14 +75,35 @@ export default function Settings() {
 
         <Section title="VOICE">
           <Toggle
+            label="Nexy voice (ElevenLabs Conversational AI)"
+            value={voicePipeline === "convai"}
+            onChange={(v) => {
+              setVoicePipeline(v ? "convai" : "legacy");
+              if (v && voiceEnabled) void startConvaiVoice({ reason: "settings" });
+              else if (!v) void stopConvaiVoice();
+            }}
+          />
+          <div className="text-[10px] text-jarvis-ice/45 pb-1">
+            ConvAI: Xbox mic → ElevenLabs agent → Irish Flash on Xbox headphones.
+            {voicePipeline === "convai" && (
+              <> Status: {convaiConnected ? "connected" : "offline"} {micStatus ? `· ${micStatus}` : ""}</>
+            )}
+          </div>
+          <Toggle
             label="JARVIS speaks aloud (TTS)"
             value={voiceEnabled}
-            onChange={setVoiceEnabled}
+            onChange={(v) => {
+              setVoiceEnabled(v);
+              if (voicePipeline === "convai") {
+                if (v) void startConvaiVoice({ reason: "voice-toggle" });
+                else void stopConvaiVoice();
+              }
+            }}
           />
           <Toggle
-            label="Listen for wake word (mic always on)"
+            label={voicePipeline === "convai" ? "Keep Nexy voice session active" : "Listen for wake word (mic always on)"}
             value={wakeEnabled}
-            onChange={setWakeEnabled}
+            onChange={(v) => { if (v) { void armMic(); } else { disarmMic(); } }}
           />
           <Toggle
             label="Say “cancel” to stop JARVIS speaking"
@@ -76,6 +113,20 @@ export default function Settings() {
         </Section>
 
         <Section title="DISPLAY">
+          {hiddenPanels.length > 0 && (
+            <>
+              <div className="text-[10px] text-jarvis-ice/45 pb-1">
+                Hidden HUD panels — restore any panel you closed with × on the drag bar.
+              </div>
+              {hiddenPanels.map((id) => (
+                <ButtonRow
+                  key={id}
+                  label={`Show ${panelLabel(id)}`}
+                  onClick={() => onRestorePanel?.(id)}
+                />
+              ))}
+            </>
+          )}
           <ButtonRow
             label="Reset panel layout"
             danger={false}

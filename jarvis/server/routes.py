@@ -763,6 +763,52 @@ async def set_persona(request: Request, body: PersonaBody):
     return {"ok": True}
 
 
+@router.get("/convai/status")
+async def convai_status(request: Request):
+    from . import convai_helpers as convai
+
+    cfg, *_ = _services(request)
+    st = convai.convai_ready(cfg)
+    st["enabled"] = bool(getattr(cfg.voice, "convai_enabled", True))
+    return st
+
+
+@router.post("/convai/ensure-agent")
+async def convai_ensure_agent(request: Request):
+    from . import convai_helpers as convai
+
+    cfg, *_ = _services(request)
+    try:
+        agent_id = await asyncio.to_thread(convai.ensure_convai_agent, cfg)
+        return {"ok": True, "agent_id": agent_id}
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@router.get("/convai/conversation-token")
+async def convai_conversation_token(request: Request):
+    from . import convai_helpers as convai
+
+    cfg, *_ = _services(request)
+    try:
+        token = await asyncio.to_thread(convai.fetch_conversation_token, cfg)
+        return {"token": token}
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@router.get("/convai/signed-url")
+async def convai_signed_url(request: Request):
+    from . import convai_helpers as convai
+
+    cfg, *_ = _services(request)
+    try:
+        url = await asyncio.to_thread(convai.fetch_signed_url, cfg)
+        return {"signed_url": url}
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
 @router.get("/audio/devices")
 async def audio_devices_forced(request: Request):
     """Ryan Xbox-only device labels (data/audio-devices.forced.json)."""

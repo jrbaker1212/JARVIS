@@ -38,6 +38,7 @@ const ArticleReader = lazy(() => import("./components/Media/ArticleReader"));
 import { getHealth } from "./lib/api";
 import { useStore, nextId, type MediaKind } from "./lib/store";
 import { refreshVoiceProfile, streamSpeak, unlockHudAudio } from "./lib/voice";
+import { startConvaiVoice } from "./lib/convaiVoice";
 import { armMic } from "./lib/micControl";
 import { wsClient } from "./lib/ws";
 
@@ -185,7 +186,11 @@ export default function App() {
   useEffect(() => {
     wsClient.connect();
     refreshVoiceProfile();
-    void unlockHudAudio();
+    if (useStore.getState().voicePipeline === "convai") {
+      void startConvaiVoice({ reason: "app-boot" });
+    } else {
+      void unlockHudAudio();
+    }
     getHealth().then(setHealth).catch(() => undefined);
     const id = setInterval(() => {
       getHealth().then(setHealth).catch(() => undefined);
@@ -203,14 +208,16 @@ export default function App() {
 
   // Restore wake-word listening after cold start when the user left it on.
   useEffect(() => {
-    const unsub = useStore.persist.onFinishHydration(() => {
-      if (useStore.getState().wakeEnabled && !useStore.getState().micEnabled) {
-        void armMic();
+    const tryArm = () => {
+      const st = useStore.getState();
+      if (st.voicePipeline === "convai") {
+        if (st.voiceEnabled && !st.convaiConnected) void startConvaiVoice({ reason: "hydrate" });
+        return;
       }
-    });
-    if (useStore.persist.hasHydrated() && useStore.getState().wakeEnabled && !useStore.getState().micEnabled) {
-      void armMic();
-    }
+      if (st.wakeEnabled && !st.micEnabled) void armMic();
+    };
+    const unsub = useStore.persist.onFinishHydration(tryArm);
+    if (useStore.persist.hasHydrated()) tryArm();
     return unsub;
   }, []);
 
@@ -232,7 +239,11 @@ export default function App() {
       if (visible) {
         console.log("[App] window visible — ws reconnect");
         wsClient.reconnect();
-        void unlockHudAudio();
+        if (useStore.getState().voicePipeline === "convai") {
+          void startConvaiVoice({ reason: "window-visible" });
+        } else {
+          void unlockHudAudio();
+        }
       }
     });
     return () => { offMode?.(); offVis?.(); };

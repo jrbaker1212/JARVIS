@@ -28,9 +28,9 @@ class ModelConfig(BaseModel):
     request_timeout_seconds: int = 120
     native_tool_calls: bool = False
     reasoning_effort: str | None = None
-    # Anti-repetition — light touch. Higher values degrade fluency and can
+    # Anti-repetition â€” light touch. Higher values degrade fluency and can
     # paradoxically push the model into longer loops. Ollama already
-    # auto-translates `frequency_penalty` → repeat_penalty internally, so
+    # auto-translates `frequency_penalty` â†’ repeat_penalty internally, so
     # we DO NOT also pass an `options.repeat_penalty` (double-penalty was
     # the cause of stream lag).
     frequency_penalty: float = 0.2
@@ -110,15 +110,15 @@ class UltimateConfig(BaseModel):
     """Master switch + per-feature toggles for the ULTIMATE upgrade.
 
     Every subsystem added by the upgrade checks its flag here, so the whole
-    thing can be reversed at runtime by editing config.yaml — no git needed.
+    thing can be reversed at runtime by editing config.yaml â€” no git needed.
     Set `enabled: false` to fall back to baseline JARVIS behaviour entirely.
     """
     enabled: bool = True
 
-    # — Intelligence —
+    # â€” Intelligence â€”
     semantic_memory: bool = True
     embed_model: str = "text-embedding-3-small"
-    # Blank → reuse the main model endpoint. Point elsewhere (e.g. a local
+    # Blank â†’ reuse the main model endpoint. Point elsewhere (e.g. a local
     # Ollama/LM-Studio embeddings server) to decouple embeddings from chat.
     embed_endpoint: str = ""
     recall_k: int = 5
@@ -130,18 +130,26 @@ class UltimateConfig(BaseModel):
     autonomous_planning: bool = True
     plan_min_chars: int = 60          # only plan for non-trivial requests
 
-    # — Intuitive —
+    # â€” Intuitive â€”
     proactive_suggestions: bool = True
 
-    # — Gorgeous (frontend reads these via /health) —
+    # â€” Gorgeous (frontend reads these via /health) â€”
     reactive_visuals: bool = True
 
 
 class VoiceConfig(BaseModel):
-    provider: str = "auto"  # auto | piper | edge_tts | nvidia_riva
+    provider: str = "auto"  # auto | elevenlabs | piper | edge_tts | nvidia_riva
     edge_voice: str = "en-GB-ThomasNeural"
     edge_rate: str = "-6%"
     edge_pitch: str = "+0Hz"
+    # ElevenLabs (primary cloud TTS when configured)
+    elevenlabs_enabled: bool = False
+    elevenlabs_api_key_env: str = "ELEVENLABS_API_KEY"
+    elevenlabs_voice_id: str = "sgk995upfe3tYLvoGcBN"
+    elevenlabs_model: str = "eleven_multilingual_v2"
+    # ElevenLabs Conversational AI (primary duplex voice — replaces HTMLAudio TTS path)
+    convai_enabled: bool = True
+    convai_agent_id_env: str = "ELEVENLABS_AGENT_ID"
     # Piper (community JARVIS model, closest to Paul Bettany)
     piper_enabled: bool = False
     piper_model: str = "data/voices/jarvis.onnx"
@@ -161,6 +169,19 @@ class VoiceConfig(BaseModel):
     )
 
 
+
+class LaunchAppConfig(BaseModel):
+    """One allowlisted launch target (local path and/or URL)."""
+    model_config = ConfigDict(extra="allow")
+    path: str = ""
+    url: str = ""
+    aliases: list[str] = Field(default_factory=list)
+
+
+class LaunchConfig(BaseModel):
+    """SAFE app/URL launch allowlist used by launch_tools.launch_app."""
+    apps: dict[str, LaunchAppConfig] = Field(default_factory=dict)
+
 class Config(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, protected_namespaces=())
 
@@ -179,6 +200,7 @@ class Config(BaseModel):
     mission: MissionConfig = Field(default_factory=MissionConfig)
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
     ultimate: UltimateConfig = Field(default_factory=UltimateConfig)
+    launch: LaunchConfig = Field(default_factory=LaunchConfig)
 
     project_root: Path = PROJECT_ROOT
 
@@ -209,3 +231,4 @@ def load_config(path: Path | None = None) -> Config:
         raw = yaml.safe_load(f) or {}
 
     return Config(**raw)
+
