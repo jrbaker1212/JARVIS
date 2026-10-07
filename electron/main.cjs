@@ -1,5 +1,5 @@
-/**
- * J.A.R.V.I.S. — Electron shell.
+﻿/**
+ * J.A.R.V.I.S. â€” Electron shell.
  *
  * Background-resident: closing the window hides to the tray instead of
  * quitting. The renderer keeps running, so the mic and wake-word loop
@@ -18,6 +18,9 @@ const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
 const http = require("http");
+
+// Allow HTMLAudioElement.play() / TTS without a prior user gesture (Electron HUD).
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 const BACKEND_PORT = process.env.JARVIS_PORT ? parseInt(process.env.JARVIS_PORT, 10) : 7341;
 const BACKEND_URL  = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -38,7 +41,7 @@ let tray = null;
 let currentMode = MODE.FULL;
 let isQuiting = false;
 
-// ── backend lifecycle ─────────────────────────────────────────────────────
+// â”€â”€ backend lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function pingBackend() {
   return new Promise((resolve) => {
@@ -87,7 +90,7 @@ function startBackend() {
   });
 }
 
-// ── window helpers ────────────────────────────────────────────────────────
+// â”€â”€ window helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function pickTrayIcon() {
   // Prefer PNG if available, fall back to bundled SVG rendered at runtime.
@@ -108,6 +111,8 @@ function pickTrayIcon() {
   return nativeImage.createEmpty();
 }
 
+let modeApplyTimer = null;
+
 function applyMode(mode, { reposition = true } = {}) {
   if (!mainWindow) return;
   // Persist the CURRENT mode's bounds before switching, so each mode
@@ -115,40 +120,53 @@ function applyMode(mode, { reposition = true } = {}) {
   persistCurrentBounds();
 
   currentMode = mode === MODE.WIDGET ? MODE.WIDGET : MODE.FULL;
-  const store = loadStoredBounds();
-  const savedForMode = store[currentMode];
-
-  if (currentMode === MODE.WIDGET) {
-    mainWindow.setAlwaysOnTop(true, "floating");
-    mainWindow.setSkipTaskbar(true);
-    mainWindow.setMinimumSize(360, 480);
-    mainWindow.setResizable(true);
-    if (savedForMode && savedForMode.width && savedForMode.height) {
-      mainWindow.setBounds(savedForMode);
-    } else {
-      mainWindow.setSize(WIDGET_W, WIDGET_H);
-      if (reposition) {
-        const display = screen.getPrimaryDisplay();
-        const { workArea } = display;
-        const x = workArea.x + workArea.width - WIDGET_W - WIDGET_MARGIN;
-        const y = workArea.y + WIDGET_MARGIN;
-        mainWindow.setPosition(x, y);
-      }
-    }
-  } else {
-    mainWindow.setAlwaysOnTop(false);
-    mainWindow.setSkipTaskbar(false);
-    mainWindow.setMinimumSize(1024, 700);
-    mainWindow.setResizable(true);
-    if (savedForMode && savedForMode.width && savedForMode.height) {
-      mainWindow.setBounds(savedForMode);
-    } else {
-      mainWindow.setSize(FULL_W, FULL_H);
-      if (reposition) mainWindow.center();
-    }
-  }
+  // Tell the renderer FIRST so Floating panels unmount before the window
+  // resizes â€” otherwise autoHeight layout saves can stamp the tiny widget
+  // viewport into localStorage and "reset" the full-HUD layout.
   broadcastMode();
   rebuildTrayMenu();
+
+  if (modeApplyTimer) clearTimeout(modeApplyTimer);
+  modeApplyTimer = setTimeout(() => {
+    modeApplyTimer = null;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const store = loadStoredBounds();
+    const savedForMode = sanitizeBounds(store[currentMode], currentMode);
+
+    if (currentMode === MODE.WIDGET) {
+      if (mainWindow.isMaximized()) mainWindow.unmaximize();
+      mainWindow.setAlwaysOnTop(true, "floating");
+      mainWindow.setSkipTaskbar(true);
+      mainWindow.setMinimumSize(360, 480);
+      mainWindow.setResizable(true);
+      if (savedForMode) {
+        mainWindow.setBounds(savedForMode);
+      } else {
+        mainWindow.setSize(WIDGET_W, WIDGET_H);
+        if (reposition) {
+          const display = screen.getPrimaryDisplay();
+          const { workArea } = display;
+          const x = workArea.x + workArea.width - WIDGET_W - WIDGET_MARGIN;
+          const y = workArea.y + WIDGET_MARGIN;
+          mainWindow.setPosition(x, y);
+        }
+      }
+    } else {
+      mainWindow.setAlwaysOnTop(false);
+      mainWindow.setSkipTaskbar(false);
+      mainWindow.setMinimumSize(1024, 700);
+      mainWindow.setResizable(true);
+      if (savedForMode) {
+        mainWindow.setBounds(savedForMode);
+      } else {
+        mainWindow.setSize(FULL_W, FULL_H);
+        if (reposition) mainWindow.center();
+      }
+      if (store[`${currentMode}Maximized`]) {
+        try { mainWindow.maximize(); } catch { /* noop */ }
+      }
+    }
+  }, 50);
 }
 
 function broadcastMode() {
@@ -169,6 +187,9 @@ function showWindow({ mode } = {}) {
 
 function hideWindow() {
   if (!mainWindow) return;
+  // X-to-tray is not quit â€” persist bounds so the next show/full relaunch
+  // restores size/position. Tray â†’ Quit JARVIS also saves in before-quit.
+  persistCurrentBounds();
   mainWindow.hide();
   try { mainWindow.webContents.send("jarvis:visibility-changed", false); } catch { /* noop */ }
 }
@@ -230,7 +251,7 @@ function createTray() {
   }
 }
 
-// ── permissions ───────────────────────────────────────────────────────────
+// â”€â”€ permissions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function installPermissionHandlers() {
   const ALLOWED = new Set([
@@ -264,7 +285,7 @@ function installPermissionHandlers() {
   });
 }
 
-// ── main window ───────────────────────────────────────────────────────────
+// â”€â”€ main window â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function boundsStorePath() {
   return path.join(app.getPath("userData"), "window-bounds.json");
@@ -275,7 +296,7 @@ function loadStoredBounds() {
     const raw = fs.readFileSync(boundsStorePath(), "utf-8");
     const j = JSON.parse(raw);
     if (j && typeof j === "object") return j;
-  } catch { /* missing or corrupt — ignore */ }
+  } catch { /* missing or corrupt â€” ignore */ }
   return {};
 }
 
@@ -283,53 +304,95 @@ function saveStoredBounds(patch) {
   try {
     const cur = loadStoredBounds();
     const next = { ...cur, ...patch };
-    fs.writeFileSync(boundsStorePath(), JSON.stringify(next));
-  } catch { /* disk full / readonly — non-fatal */ }
+    fs.writeFileSync(boundsStorePath(), JSON.stringify(next, null, 0));
+  } catch { /* disk full / readonly â€” non-fatal */ }
+}
+
+/** True when at least an 80x60 chunk of `b` intersects some display workArea. */
+function boundsVisibleOnAnyDisplay(b) {
+  if (!b || typeof b.x !== "number" || typeof b.y !== "number") return false;
+  const w = Number(b.width) || 0;
+  const h = Number(b.height) || 0;
+  if (w < 100 || h < 80) return false;
+  return screen.getAllDisplays().some((d) => {
+    const a = d.workArea;
+    const ix = Math.max(b.x, a.x);
+    const iy = Math.max(b.y, a.y);
+    const ax = Math.min(b.x + w, a.x + a.width);
+    const ay = Math.min(b.y + h, a.y + a.height);
+    return (ax - ix) >= 80 && (ay - iy) >= 60;
+  });
+}
+
+/**
+ * Return a safe Electron bounds object for `mode`, or null to use defaults.
+ * Multi-monitor safe: rejects bounds that no longer intersect any display.
+ */
+function sanitizeBounds(saved, mode) {
+  if (!saved || typeof saved !== "object") return null;
+  const fallbackW = mode === MODE.WIDGET ? WIDGET_W : FULL_W;
+  const fallbackH = mode === MODE.WIDGET ? WIDGET_H : FULL_H;
+  const width = Math.max(100, Number(saved.width) || fallbackW);
+  const height = Math.max(80, Number(saved.height) || fallbackH);
+  const candidate = {
+    x: Number(saved.x),
+    y: Number(saved.y),
+    width,
+    height,
+  };
+  if (!Number.isFinite(candidate.x) || !Number.isFinite(candidate.y)) return null;
+  if (!boundsVisibleOnAnyDisplay(candidate)) return null;
+  return candidate;
 }
 
 function persistCurrentBounds() {
-  if (!mainWindow) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   if (mainWindow.isMinimized() || mainWindow.isFullScreen()) return;
   try {
-    const b = mainWindow.getBounds();
-    saveStoredBounds({ [currentMode]: b });
+    const isMax = mainWindow.isMaximized();
+    // Prefer normal (restore) bounds so maximizing doesn't overwrite the
+    // user's un-maximized size/position.
+    const b = (typeof mainWindow.getNormalBounds === "function")
+      ? mainWindow.getNormalBounds()
+      : mainWindow.getBounds();
+    saveStoredBounds({
+      [currentMode]: { x: b.x, y: b.y, width: b.width, height: b.height },
+      [`${currentMode}Maximized`]: !!isMax,
+      mode: currentMode,
+    });
   } catch { /* noop */ }
 }
 
-function pickInitialBounds() {
+function pickInitialBounds(mode = MODE.FULL) {
   const store = loadStoredBounds();
-  const saved = store[MODE.FULL];
-  if (!saved) return { width: FULL_W, height: FULL_H };
-  // Validate the saved bounds intersect a current display so we don't
-  // restore the window off-screen after a monitor change.
-  const displays = screen.getAllDisplays();
-  const fits = displays.some((d) => {
-    const a = d.workArea;
-    return (
-      saved.x < a.x + a.width &&
-      saved.x + saved.width > a.x &&
-      saved.y < a.y + a.height &&
-      saved.y + saved.height > a.y
-    );
-  });
-  if (!fits) return { width: FULL_W, height: FULL_H };
-  return saved;
+  const saved = sanitizeBounds(store[mode], mode);
+  if (saved) return saved;
+  return {
+    width: mode === MODE.WIDGET ? WIDGET_W : FULL_W,
+    height: mode === MODE.WIDGET ? WIDGET_H : FULL_H,
+  };
 }
 
 function createWindow() {
-  const init = pickInitialBounds();
+  const store = loadStoredBounds();
+  // Restore last shell mode so relaunch opens where Ryan left it.
+  currentMode = store.mode === MODE.WIDGET ? MODE.WIDGET : MODE.FULL;
+  const init = pickInitialBounds(currentMode);
+  const isWidget = currentMode === MODE.WIDGET;
   mainWindow = new BrowserWindow({
-    width: init.width || FULL_W,
-    height: init.height || FULL_H,
+    width: init.width || (isWidget ? WIDGET_W : FULL_W),
+    height: init.height || (isWidget ? WIDGET_H : FULL_H),
     x: init.x,
     y: init.y,
-    minWidth: 1024,
-    minHeight: 700,
+    minWidth: isWidget ? 360 : 1024,
+    minHeight: isWidget ? 480 : 700,
     backgroundColor: "#03070f",
     show: false,
     frame: false,
     titleBarStyle: "hidden",
     autoHideMenuBar: true,
+    alwaysOnTop: isWidget,
+    skipTaskbar: isWidget,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -339,6 +402,9 @@ function createWindow() {
   });
 
   mainWindow.once("ready-to-show", () => {
+    if (!isWidget && store.fullMaximized) {
+      try { mainWindow.maximize(); } catch { /* noop */ }
+    }
     mainWindow.show();
     broadcastMode();
   });
@@ -351,7 +417,7 @@ function createWindow() {
     return { action: "allow" };
   });
 
-  // Close → hide to tray. Quit only via tray menu / isQuiting flag.
+  // Close â†’ hide to tray. Quit only via tray menu (sets isQuiting) / before-quit.
   mainWindow.on("close", (e) => {
     if (!isQuiting) {
       e.preventDefault();
@@ -363,7 +429,7 @@ function createWindow() {
   mainWindow.on("hide", rebuildTrayMenu);
   mainWindow.on("closed", () => { mainWindow = null; });
 
-  // Persist bounds (per mode) — debounced via setTimeout to coalesce the
+  // Persist bounds (per mode) â€” debounced via setTimeout to coalesce the
   // rapid stream of `resize` / `move` events Windows fires during a drag.
   let saveTimer = null;
   const scheduleSave = () => {
@@ -385,20 +451,55 @@ async function loadApp() {
         <div style="text-align:center">
           <div style="font-size:14px;letter-spacing:0.4em;opacity:0.6">J.A.R.V.I.S.</div>
           <div style="font-size:22px;margin-top:12px">backend not responding on ${BACKEND_URL}</div>
-          <div style="font-size:12px;margin-top:24px;opacity:0.55">start it manually: run.bat — then reload (Ctrl+R)</div>
+          <div style="font-size:12px;margin-top:24px;opacity:0.55">start it manually: run.bat â€” then reload (Ctrl+R)</div>
         </div>
       </body></html>`
     )}`);
     return;
   }
   mainWindow.loadURL(BACKEND_URL);
+
+  mainWindow.webContents.once("did-finish-load", () => {
+    try { mainWindow.show(); mainWindow.focus(); } catch { /* noop */ }
+    // Unlock media pipeline, then optional one-shot TTS smoke if flag file exists.
+    const flagPath = path.join(PROJECT_ROOT, "data", "tts-smoke.flag");
+    const wantSmoke = fs.existsSync(flagPath);
+    if (wantSmoke) {
+      try { fs.unlinkSync(flagPath); } catch { /* noop */ }
+    }
+    const js = `
+      (async () => {
+        try {
+          if (typeof window.__jarvisUnlockAudio === "function") {
+            await window.__jarvisUnlockAudio();
+          } else {
+            const silent = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+            silent.volume = 0.01;
+            await silent.play().catch(() => {});
+            silent.pause();
+          }
+          if (window.AudioContext || window.webkitAudioContext) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            await ctx.resume().catch(() => {});
+            try { await ctx.close(); } catch {}
+          }
+          console.log("[electron] audio unlock attempted");
+        } catch (e) { console.warn("[electron] audio unlock failed", e); }
+        if (${wantSmoke ? "true" : "false"} && typeof window.__jarvisSpeak === "function") {
+          console.log("[electron] TTS smoke speak");
+          window.__jarvisSpeak("Testing. Can you hear me Ryan?");
+        }
+      })();
+    `;
+    mainWindow.webContents.executeJavaScript(js).catch((e) => console.warn("[electron] unlock js failed", e));
+  });
 }
 
-// ── IPC ───────────────────────────────────────────────────────────────────
+// â”€â”€ IPC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function installIpc() {
   ipcMain.on("jarvis:wake", () => {
-    // Renderer detected the wake word — promote to widget mode if hidden,
+    // Renderer detected the wake word â€” promote to widget mode if hidden,
     // otherwise just bring forward.
     if (!mainWindow) return;
     if (!mainWindow.isVisible()) {
@@ -418,7 +519,7 @@ function installIpc() {
   ipcMain.handle("jarvis:request-mode", () => currentMode);
 }
 
-// ── global shortcuts ─────────────────────────────────────────────────────
+// â”€â”€ global shortcuts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function installShortcuts() {
   const accel = "CommandOrControl+Shift+Space";
@@ -431,7 +532,7 @@ function installShortcuts() {
   });
 }
 
-// ── lifecycle ─────────────────────────────────────────────────────────────
+// â”€â”€ lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) {
@@ -461,7 +562,7 @@ if (!singleInstance) {
 }
 
 app.on("window-all-closed", (e) => {
-  // Do NOT quit when window closes — tray keeps the app alive.
+  // Do NOT quit when window closes â€” tray keeps the app alive.
   e.preventDefault?.();
 });
 

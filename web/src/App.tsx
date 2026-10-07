@@ -7,7 +7,13 @@ import DropZone from "./components/Chat/DropZone";
 import TerminalPanel from "./components/HUD/TerminalPanel";
 import CornerFrame from "./components/HUD/CornerFrame";
 import DiagPanel from "./components/HUD/DiagPanel";
-import Floating, { resetAllLayouts } from "./components/HUD/Floating";
+import Floating, {
+  panelLabel,
+  resetAllLayouts,
+  showPanel,
+  useHiddenPanelIds,
+  usePanelVisible,
+} from "./components/HUD/Floating";
 import MissionLog from "./components/HUD/MissionLog";
 import PlanPanel from "./components/HUD/PlanPanel";
 import Reticle from "./components/HUD/Reticle";
@@ -31,7 +37,8 @@ const Lightbox      = lazy(() => import("./components/Media/Lightbox"));
 const ArticleReader = lazy(() => import("./components/Media/ArticleReader"));
 import { getHealth } from "./lib/api";
 import { useStore, nextId, type MediaKind } from "./lib/store";
-import { refreshVoiceProfile, streamSpeak } from "./lib/voice";
+import { refreshVoiceProfile, streamSpeak, unlockHudAudio } from "./lib/voice";
+import { armMic } from "./lib/micControl";
 import { wsClient } from "./lib/ws";
 
 const GREETING_SESSION_KEY = "jarvis.greeting.sent.v1";
@@ -104,6 +111,46 @@ function useViewport() {
   return viewport;
 }
 
+function HiddenPanelsMenu({
+  onRestore,
+}: {
+  onRestore: (id: string) => void;
+}) {
+  const hidden = useHiddenPanelIds();
+  const [open, setOpen] = useState(false);
+  if (hidden.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-12 right-[320px] z-50">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title="Restore hidden panels"
+        className="glass-chip hover:bg-jarvis-cyan/10 hover:text-jarvis-ice transition-colors"
+      >
+        ⊞ panels ({hidden.length})
+      </button>
+      {open && (
+        <div className="absolute bottom-full right-0 mb-2 min-w-[200px] max-h-[280px] overflow-y-auto rounded-lg border border-jarvis-cyan/25 bg-jarvis-glass/95 backdrop-blur-md shadow-lg py-1 text-mono text-[11px]">
+          {hidden.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="w-full text-left px-3 py-1.5 text-jarvis-ice/85 hover:bg-jarvis-cyan/10 transition-colors"
+              onClick={() => {
+                onRestore(id);
+                setOpen(false);
+              }}
+            >
+              Show {panelLabel(id)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const setHealth = useStore((s) => s.setHealth);
   const media = useStore((s) => s.media);
@@ -113,15 +160,51 @@ export default function App() {
   const hiddenRef = useRef(false);
   const lastMediaLenRef = useRef(0);
 
+  const visDiag = usePanelVisible("diag");
+  const visUptime = usePanelVisible("uptime");
+  const visSubs = usePanelVisible("subs");
+  const visTerminal = usePanelVisible("terminal");
+  const visChat = usePanelVisible("chat");
+  const visMission = usePanelVisible("mission");
+  const visToolFeed = usePanelVisible("toolFeed");
+  const visSwarm = usePanelVisible("swarm");
+  const visPlan = usePanelVisible("plan");
+  const visCmd = usePanelVisible("cmd");
+  const visReader = usePanelVisible("reader.pinned");
+  const visHubImages = usePanelVisible("hub.images");
+  const visHubVideos = usePanelVisible("hub.videos");
+  const visHubWebsearch = usePanelVisible("hub.websearch");
+  const visHubNews = usePanelVisible("hub.news");
+  const visHubImagesearch = usePanelVisible("hub.imagesearch");
+  const visHubPages = usePanelVisible("hub.pages");
+  const visHubWebcam = usePanelVisible("hub.webcam");
+  const visHubMemory = usePanelVisible("hub.memory");
+  const visHubModel3d = usePanelVisible("hub.model3d");
+  const settingsVisible = usePanelVisible("settings");
+
   useEffect(() => {
     wsClient.connect();
     refreshVoiceProfile();
+    void unlockHudAudio();
     getHealth().then(setHealth).catch(() => undefined);
     const id = setInterval(() => {
       getHealth().then(setHealth).catch(() => undefined);
     }, 15_000);
     return () => clearInterval(id);
   }, [setHealth]);
+
+  // Restore wake-word listening after cold start when the user left it on.
+  useEffect(() => {
+    const unsub = useStore.persist.onFinishHydration(() => {
+      if (useStore.getState().wakeEnabled && !useStore.getState().micEnabled) {
+        void armMic();
+      }
+    });
+    if (useStore.persist.hasHydrated() && useStore.getState().wakeEnabled && !useStore.getState().micEnabled) {
+      void armMic();
+    }
+    return unsub;
+  }, []);
 
   // ── Electron integration: track shell mode + window visibility ──────────
   useEffect(() => {
@@ -156,16 +239,24 @@ export default function App() {
   useEffect(() => {
     let lastLen = 0;
     let lastId = "";
+    let lastFingerprint = "";
     return useStore.subscribe((state) => {
       const last = state.chat[state.chat.length - 1];
       if (!last || last.role !== "assistant") return;
       if (last.id !== lastId) {
         lastId = last.id;
         lastLen = 0;
+        lastFingerprint = "";
       }
       const grew = last.text.length !== lastLen;
       lastLen = last.text.length;
+      // Fingerprint guards StrictMode / double-subscribe / identical final ticks
+      // from re-feeding the same text into streamSpeak (double TTS).
+      const fingerprint = `${last.id}|${last.text.length}|${last.streaming ? 1 : 0}|${last.text.slice(-48)}`;
+      if (!grew && last.streaming) return;
+      if (fingerprint === lastFingerprint) return;
       if (grew || !last.streaming) {
+        lastFingerprint = fingerprint;
         console.log("[App:TTS] streamSpeak id=%s len=%d grew=%s isFinal=%s streaming=%s", last.id, last.text.length, grew, !last.streaming, last.streaming);
         streamSpeak(last.id, last.text, !last.streaming);
       }
@@ -200,6 +291,11 @@ export default function App() {
   const hasSwarms = swarms.length > 0;
   const hasPlan = useStore((s) => s.plan != null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const restorePanel = (id: string) => {
+    showPanel(id);
+    if (id === "settings") setSettingsOpen(true);
+  };
 
   // Helper: which hubs have at least 1 item?
   const has = (kinds: MediaKind[]) => media.some((m) => kinds.includes(m.kind));
@@ -262,6 +358,8 @@ export default function App() {
       <TopBar />
       <StatusBar />
 
+      <HiddenPanelsMenu onRestore={restorePanel} />
+
       {/* Reset-layout button (lower right corner near StatusBar) */}
       <button
         onClick={() => {
@@ -275,7 +373,10 @@ export default function App() {
 
       {/* Settings toggle */}
       <button
-        onClick={() => setSettingsOpen((v) => !v)}
+        onClick={() => {
+          showPanel("settings");
+          setSettingsOpen(true);
+        }}
         title="Settings"
         className="fixed bottom-12 right-[200px] z-50 glass-chip hover:bg-jarvis-cyan/10 hover:text-jarvis-ice transition-colors"
       >
@@ -295,86 +396,124 @@ export default function App() {
       </button>
 
       {/* Floating, movable + resizable panels */}
-      <Floating id="diag"     defaultBox={D.diag}     minW={260} minH={180}><DiagPanel /></Floating>
-      <Floating id="uptime"   defaultBox={D.uptime}   minW={180} minH={118}><UptimePanel /></Floating>
-      <Floating id="subs"     defaultBox={D.subs}     minW={260} minH={220}><Subsystems /></Floating>
-      <Floating id="terminal" defaultBox={D.terminal} minW={260} minH={180}><TerminalPanel /></Floating>
+      {visDiag && (
+        <Floating id="diag" defaultBox={D.diag} minW={260} minH={180} label="Diagnostics">
+          <DiagPanel />
+        </Floating>
+      )}
+      {visUptime && (
+        <Floating id="uptime" defaultBox={D.uptime} minW={180} minH={118} label="Uptime">
+          <UptimePanel />
+        </Floating>
+      )}
+      {visSubs && (
+        <Floating id="subs" defaultBox={D.subs} minW={260} minH={220} label="Subsystems">
+          <Subsystems />
+        </Floating>
+      )}
+      {visTerminal && (
+        <Floating id="terminal" defaultBox={D.terminal} minW={260} minH={180} label="Terminal">
+          <TerminalPanel />
+        </Floating>
+      )}
 
-      <Floating id="chat"     defaultBox={D.chat}     minW={300} minH={260}><ChatPanel /></Floating>
-      <Floating id="mission"  defaultBox={D.mission}  minW={280} minH={90}><MissionLog /></Floating>
-      <Floating id="toolFeed" defaultBox={D.toolFeed} minW={280} minH={140}><ToolFeed /></Floating>
-      {hasSwarms && (
-        <Floating id="swarm" defaultBox={D.swarm} minW={300} minH={200} z={23}>
+      {visChat && (
+        <Floating id="chat" defaultBox={D.chat} minW={300} minH={260} label="Chat">
+          <ChatPanel />
+        </Floating>
+      )}
+      {visMission && (
+        <Floating id="mission" defaultBox={D.mission} minW={280} minH={90} label="Mission log">
+          <MissionLog />
+        </Floating>
+      )}
+      {visToolFeed && (
+        <Floating id="toolFeed" defaultBox={D.toolFeed} minW={280} minH={140} label="Tool feed">
+          <ToolFeed />
+        </Floating>
+      )}
+      {hasSwarms && visSwarm && (
+        <Floating id="swarm" defaultBox={D.swarm} minW={300} minH={200} z={23} label="Swarm">
           <SwarmPanel />
         </Floating>
       )}
-      {hasPlan && (
-        <Floating id="plan" defaultBox={D.plan} minW={300} minH={180} z={24}>
+      {hasPlan && visPlan && (
+        <Floating id="plan" defaultBox={D.plan} minW={300} minH={180} z={24} label="Plan">
           <PlanPanel />
         </Floating>
       )}
-      {settingsOpen && (
-        <Floating id="settings" defaultBox={D.settings} minW={340} minH={300} z={28}>
-          <Settings />
+      {settingsOpen && settingsVisible && (
+        <Floating
+          id="settings"
+          defaultBox={D.settings}
+          minW={340}
+          minH={300}
+          z={28}
+          label="Settings"
+          onHide={() => setSettingsOpen(false)}
+        >
+          <Settings onRestorePanel={restorePanel} />
         </Floating>
       )}
       {/* Pinned reader — when readerPinned=true the ArticleReader component
           renders only the inner article surface, so we wrap it in a
           Floating panel here. Modal mode (unpinned) is mounted directly
           below as fullscreen overlay. */}
-      <PinnedReader defaultBox={D.reader} />
+      {visReader && <PinnedReader defaultBox={D.reader} />}
 
       {/* ── Per-kind media hubs. Each only renders when has items. ── */}
-      {has(["image"]) && (
-        <Floating id="hub.images" defaultBox={D.images} minW={360} minH={260} z={22}>
-          <MediaHub kinds={["image"]} title="IMAGE GEN" accent="#a5f3fc" />
+      {has(["image"]) && visHubImages && (
+        <Floating id="hub.images" defaultBox={D.images} minW={360} minH={260} z={22} label="Image gen">
+          <MediaHub kinds={["image"]} title="IMAGE GEN" accent="#7df9ff" />
         </Floating>
       )}
-      {has(["video", "videos"]) && (
-        <Floating id="hub.videos" defaultBox={D.videos} minW={360} minH={280} z={22}>
-          <MediaHub kinds={["video", "videos"]} title="VIDEOS" accent="#fbbf24" />
+      {has(["video", "videos"]) && visHubVideos && (
+        <Floating id="hub.videos" defaultBox={D.videos} minW={360} minH={280} z={22} label="Videos">
+          <MediaHub kinds={["video", "videos"]} title="VIDEOS" accent="#c9a227" />
         </Floating>
       )}
-      {has(["search"]) && (
-        <Floating id="hub.websearch" defaultBox={D.websearch} minW={340} minH={260} z={22}>
-          <MediaHub kinds={["search"]} title="WEB SEARCH" accent="#7dd3fc" />
+      {has(["search"]) && visHubWebsearch && (
+        <Floating id="hub.websearch" defaultBox={D.websearch} minW={340} minH={260} z={22} label="Web search">
+          <MediaHub kinds={["search"]} title="WEB SEARCH" accent="#00e5ff" />
         </Floating>
       )}
-      {has(["news"]) && (
-        <Floating id="hub.news" defaultBox={D.news} minW={340} minH={260} z={22}>
+      {has(["news"]) && visHubNews && (
+        <Floating id="hub.news" defaultBox={D.news} minW={340} minH={260} z={22} label="News">
           <MediaHub kinds={["news"]} title="NEWS" accent="#fca5a5" />
         </Floating>
       )}
-      {has(["images"]) && (
-        <Floating id="hub.imagesearch" defaultBox={D.imagesearch} minW={360} minH={280} z={22}>
-          <MediaHub kinds={["images"]} title="IMAGE SEARCH" accent="#7dd3fc" />
+      {has(["images"]) && visHubImagesearch && (
+        <Floating id="hub.imagesearch" defaultBox={D.imagesearch} minW={360} minH={280} z={22} label="Image search">
+          <MediaHub kinds={["images"]} title="IMAGE SEARCH" accent="#00e5ff" />
         </Floating>
       )}
-      {has(["page", "pdf"]) && (
-        <Floating id="hub.pages" defaultBox={D.pages} minW={400} minH={320} z={22}>
-          <MediaHub kinds={["page", "pdf"]} title="PAGES" accent="#bae6fd" />
+      {has(["page", "pdf"]) && visHubPages && (
+        <Floating id="hub.pages" defaultBox={D.pages} minW={400} minH={320} z={22} label="Pages">
+          <MediaHub kinds={["page", "pdf"]} title="PAGES" accent="#c9a227" />
         </Floating>
       )}
-      {has(["webcam"]) && (
-        <Floating id="hub.webcam" defaultBox={D.webcam} minW={340} minH={260} z={22}>
+      {has(["webcam"]) && visHubWebcam && (
+        <Floating id="hub.webcam" defaultBox={D.webcam} minW={340} minH={260} z={22} label="Camera">
           <MediaHub kinds={["webcam"]} title="CAMERA" accent="#fb7185" />
         </Floating>
       )}
-      {has(["galaxy"]) && (
-        <Floating id="hub.memory" defaultBox={D.memory} minW={380} minH={320} z={22}>
-          <MediaHub kinds={["galaxy"]} title="MEMORY" accent="#a78bfa" />
+      {has(["galaxy"]) && visHubMemory && (
+        <Floating id="hub.memory" defaultBox={D.memory} minW={380} minH={320} z={22} label="Memory">
+          <MediaHub kinds={["galaxy"]} title="MEMORY" accent="#ff2d95" />
         </Floating>
       )}
-      {has(["model3d"]) && (
-        <Floating id="hub.model3d" defaultBox={D.model3d} minW={360} minH={320} z={22}>
-          <MediaHub kinds={["model3d"]} title="3D MODELS" accent="#bae6fd" />
+      {has(["model3d"]) && visHubModel3d && (
+        <Floating id="hub.model3d" defaultBox={D.model3d} minW={360} minH={320} z={22} label="3D models">
+          <MediaHub kinds={["model3d"]} title="3D MODELS" accent="#c9a227" />
         </Floating>
       )}
 
       {/* Command bar — height auto-grows when images attached (so 3D/img2img/analyze visible) */}
-      <Floating id="cmd" defaultBox={D.cmd} minW={420} minH={72} autoHeight>
-        <CommandBar />
-      </Floating>
+      {visCmd && (
+        <Floating id="cmd" defaultBox={D.cmd} minW={420} minH={72} autoHeight label="Command bar">
+          <CommandBar />
+        </Floating>
+      )}
 
       <Reticle />
       <Suspense fallback={null}>
@@ -397,7 +536,7 @@ function PinnedReader({ defaultBox }: { defaultBox: { x: number; y: number; w: n
   const pinned = useStore((s) => s.readerPinned);
   if (!url || !pinned) return null;
   return (
-    <Floating id="reader.pinned" defaultBox={defaultBox} minW={420} minH={320} z={29}>
+    <Floating id="reader.pinned" defaultBox={defaultBox} minW={420} minH={320} z={29} label="Reader (pinned)">
       <Suspense fallback={null}>
         <ArticleReader />
       </Suspense>

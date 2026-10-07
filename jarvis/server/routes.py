@@ -1,4 +1,4 @@
-"""REST routes."""
+﻿"""REST routes."""
 from __future__ import annotations
 
 import asyncio
@@ -25,7 +25,7 @@ from pydantic import BaseModel
 router = APIRouter()
 _stt_log = logging.getLogger("jarvis.stt")
 
-# ── VRAM manager integration ────────────────────────────────────────────────
+# â”€â”€ VRAM manager integration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 from ..core.vram_manager import (
     GPUResource,
     apply_vram_cap,
@@ -37,8 +37,8 @@ _whisper_lock = threading.Lock()  # prevent STT during GPU eviction
 
 
 # Whisper's training set was dominated by YouTube subtitles. On near-silent
-# or noisy clips the LM emits canned outros — "thank you for watching",
-# "please subscribe", lone "thanks", "you", "." — even with VAD on. We
+# or noisy clips the LM emits canned outros â€” "thank you for watching",
+# "please subscribe", lone "thanks", "you", "." â€” even with VAD on. We
 # pattern-match these and discard so they never reach the chat loop.
 _HALLUCINATION_RE = re.compile(
     r"""^\s*
@@ -52,8 +52,8 @@ _HALLUCINATION_RE = re.compile(
     | (?:see|catch)\s+you\s+(?:later|next\s+time)[\s,.!?]*
     | you[\s,.!?]*
     | (?:oh|ohh+|uh|uhh+|um|umm+|hmm+|hm|ah|ahh+|aha|eh|ehh+|mm+|er|err+
-        |huh|ugh|oof|whoa|oops|mhm|uh[\s-]*huh|oh\s+my)[\s,.!?…]*
-    | [.!?,…\s♪♫]+
+        |huh|ugh|oof|whoa|oops|mhm|uh[\s-]*huh|oh\s+my)[\s,.!?â€¦]*
+    | [.!?,â€¦\sâ™ªâ™«]+
     )
     \s*$""",
     re.IGNORECASE | re.VERBOSE,
@@ -73,7 +73,7 @@ def _filter_whisper_hallucination(text: str) -> str:
         return ""
     return text
 
-# ── Live log streaming ───────────────────────────────────────────────────────
+# â”€â”€ Live log streaming â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # A lightweight SSE log sink: last 300 records in memory, broadcast to all
 # connected clients via per-client asyncio.Queue.
 
@@ -197,12 +197,12 @@ async def speech_to_text(audio: UploadFile = File(...)):
 
     # Tightened decode kwargs that suppress Whisper's well-known YouTube-style
     # hallucinations ("thank you", "thanks for watching", "subscribe", "."):
-    #   * vad_filter — Silero VAD trims silence segments before decoding.
-    #   * no_speech_threshold raised — segments with high no-speech probability
+    #   * vad_filter â€” Silero VAD trims silence segments before decoding.
+    #   * no_speech_threshold raised â€” segments with high no-speech probability
     #     are dropped instead of being decoded into junk.
     #   * log_prob_threshold + compression_ratio_threshold cull low-confidence
     #     repetitive output.
-    #   * temperature=0 — deterministic greedy decode, no sampled fallback.
+    #   * temperature=0 â€” deterministic greedy decode, no sampled fallback.
     #   * initial_prompt biases the LM away from the YouTube-style outro
     #     phrases and toward technical assistant vocabulary.
     _WHISPER_KW: dict = dict(
@@ -216,7 +216,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
         compression_ratio_threshold=2.4,
         temperature=0.0,
         initial_prompt=(
-            "JARVIS command. Search, generate image, open page, run code, "
+            "Hey Nexy command. Search, generate image, open page, run code, "
             "show news, list videos, open the file."
         ),
     )
@@ -238,14 +238,14 @@ async def speech_to_text(audio: UploadFile = File(...)):
                 # and rebuild on CPU once; retry transcription.
                 msg = str(e)
                 if "out of memory" in msg.lower():
-                    _stt_log.warning("STT: CUDA OOM — switching to CPU for this run. Detail: %s", e)
+                    _stt_log.warning("STT: CUDA OOM â€” switching to CPU for this run. Detail: %s", e)
                     _vram_flush()
                     _switch_whisper_to_cpu()
                     model = _get_whisper_model()
                     segments, _ = model.transcribe(path, **_WHISPER_KW)
                     return _post_process(" ".join(seg.text.strip() for seg in segments).strip())
                 if any(s in msg.lower() for s in ("winerror 193", "cufft", "cudnn", "cublas", "not a valid win32", "could not load")):
-                    _stt_log.warning("STT: GPU transcription DLL failure — switching to CPU permanently. Detail: %s", e)
+                    _stt_log.warning("STT: GPU transcription DLL failure â€” switching to CPU permanently. Detail: %s", e)
                     _switch_whisper_to_cpu()
                     model = _get_whisper_model()
                     segments, _ = model.transcribe(path, **_WHISPER_KW)
@@ -268,7 +268,7 @@ async def speech_to_text(audio: UploadFile = File(...)):
 
 
 # Cached Whisper model (loaded once, reused). When GPU runtime is broken
-# we permanently switch to CPU for this process — never thrash mid-request.
+# we permanently switch to CPU for this process â€” never thrash mid-request.
 _whisper_model = None
 _whisper_device = None    # "cuda" | "cpu" | None
 
@@ -295,14 +295,14 @@ def _evict_whisper_from_gpu() -> None:
             del _whisper_model
             _whisper_model = None
             _vram_flush()
-            _stt_log.info("Whisper evicted — VRAM freed")
+            _stt_log.info("Whisper evicted â€” VRAM freed")
 
 
 def _restore_whisper_to_gpu() -> None:
     """Called by the VRAM manager after another subsystem (FLUX) is done.
     Lazy-restores: the actual model load happens on next STT request."""
     global _whisper_model
-    # Don't eagerly reload — let it lazy-load on next _get_whisper_model() call.
+    # Don't eagerly reload â€” let it lazy-load on next _get_whisper_model() call.
     # Just log that it's available to reload.
     _stt_log.info("Whisper restore available (will lazy-load on next STT request)")
 
@@ -358,7 +358,7 @@ def _get_whisper_model():
 
     # Forced CPU mode (set after a runtime failure).
     if _whisper_device == "cpu":
-        _stt_log.info("Loading Whisper 'small' on CPU (int8)…")
+        _stt_log.info("Loading Whisper 'small' on CPU (int8)â€¦")
         _whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
         _stt_log.info("Whisper small loaded on CPU.")
         return _whisper_model
@@ -366,10 +366,10 @@ def _get_whisper_model():
     # First-time load: probe CUDA runtime before touching the GPU model.
     if _whisper_cuda_runtime_ok():
         try:
-            # large-v3-turbo: same quality as large-v3, ~8× faster decoding,
+            # large-v3-turbo: same quality as large-v3, ~8Ã— faster decoding,
             # ~1.5 GB VRAM (vs ~3 GB for large-v3). Lets Whisper stay loaded
             # alongside FLUX on a 16 GB card without thrash.
-            _stt_log.info("Loading Whisper 'large-v3-turbo' on GPU (float16)…")
+            _stt_log.info("Loading Whisper 'large-v3-turbo' on GPU (float16)â€¦")
             _whisper_model = WhisperModel("large-v3-turbo", device="cuda", compute_type="float16")
             _whisper_device = "cuda"
             _stt_log.info("Whisper large-v3-turbo loaded on GPU.")
@@ -382,7 +382,7 @@ def _get_whisper_model():
             )
             return _whisper_model
         except Exception as e:  # noqa: BLE001
-            _stt_log.warning("GPU model load failed (%s) — falling back to CPU.", e)
+            _stt_log.warning("GPU model load failed (%s) â€” falling back to CPU.", e)
     else:
         _stt_log.warning(
             "CUDA runtime DLLs (cuBLAS/cuDNN/cuFFT) not loadable on this host. "
@@ -391,7 +391,7 @@ def _get_whisper_model():
         )
 
     _whisper_device = "cpu"
-    _stt_log.info("Loading Whisper 'small' on CPU (int8)…")
+    _stt_log.info("Loading Whisper 'small' on CPU (int8)â€¦")
     _whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
     _stt_log.info("Whisper small loaded on CPU.")
     return _whisper_model
@@ -487,7 +487,7 @@ def _try_pynvml():
         return _pynvml
     except Exception as e:  # noqa: BLE001
         _pynvml_failed = True
-        _gpu_log.info("pynvml unavailable (%s) — falling back to nvidia-smi", e)
+        _gpu_log.info("pynvml unavailable (%s) â€” falling back to nvidia-smi", e)
         return None
 
 
@@ -689,7 +689,7 @@ async def list_intents_endpoint(_request: Request):
 @router.get("/intents/classify")
 async def classify_endpoint(text: str):
     """Dry-run intent classification on arbitrary text. The router does NOT
-    execute any tool — it just reports which intent (if any) would fire.
+    execute any tool â€” it just reports which intent (if any) would fire.
     Lets you verify routing without spending an LLM call."""
     from ..core.intent_router import classify
     m = classify(text)
@@ -763,6 +763,23 @@ async def set_persona(request: Request, body: PersonaBody):
     return {"ok": True}
 
 
+@router.get("/audio/devices")
+async def audio_devices_forced(request: Request):
+    """Ryan Xbox-only device labels (data/audio-devices.forced.json)."""
+    cfg, *_ = _services(request)
+    path = cfg.abs_path("data/audio-devices.forced.json")
+    if path.is_file():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pass
+    return {
+        "playback": "Headphones (Xbox Controller)",
+        "recording": "Headset Microphone (Xbox Controller)",
+        "forced": True,
+    }
+
+
 @router.get("/tts/status")
 async def tts_status(request: Request):
     cfg, *_ = _services(request)
@@ -770,8 +787,16 @@ async def tts_status(request: Request):
     riva_client_available = _riva_client_available()
     riva_ready = _riva_enabled(cfg) and riva_client_available
     piper_ready = _piper_available(cfg)
+    eleven_ready = _elevenlabs_available(cfg)
 
-    if piper_ready:
+    if eleven_ready and _should_try_elevenlabs(cfg):
+        provider, label, voice, lang = (
+            "elevenlabs",
+            "ElevenLabs",
+            getattr(cfg.voice, "elevenlabs_voice_id", ""),
+            "en",
+        )
+    elif piper_ready:
         provider, label, voice, lang = "piper", "JARVIS (Piper, community model)", "jarvis", "en-GB"
     elif riva_ready:
         provider, label, voice, lang = "nvidia-riva", "NVIDIA Riva / Jarvis TTS", cfg.voice.riva_voice, cfg.voice.riva_language_code
@@ -782,13 +807,21 @@ async def tts_status(request: Request):
         lang = "en-GB"
 
     return {
-        "available": edge_available or riva_ready or piper_ready,
+        "available": edge_available or riva_ready or piper_ready or eleven_ready,
         "provider": provider,
         "requested_provider": cfg.voice.provider,
         "voice": voice,
         "label": label,
         "lang": lang,
         "providers": {
+            "elevenlabs": {
+                "enabled": bool(getattr(cfg.voice, "elevenlabs_enabled", False))
+                or (cfg.voice.provider or "").lower().strip() in ("elevenlabs", "eleven_labs"),
+                "available": eleven_ready,
+                "voice_id": getattr(cfg.voice, "elevenlabs_voice_id", ""),
+                "model": getattr(cfg.voice, "elevenlabs_model", "eleven_multilingual_v2"),
+                "note": "Set ELEVENLABS_API_KEY in .env. Primary TTS when provider=elevenlabs.",
+            },
             "piper": {
                 "enabled":  bool(getattr(cfg.voice, "piper_enabled", False)),
                 "available": piper_ready,
@@ -834,48 +867,63 @@ async def tts(request: Request, body: TTSBody):
         return JSONResponse({"ok": False, "error": "empty text"}, status_code=400)
     text = text[:1800]
     tts_log = logging.getLogger("jarvis.tts")
+    provider = (cfg.voice.provider or "auto").lower().strip()
+    eleven_only = provider in ("elevenlabs", "eleven_labs")
 
-    # 1. Piper — community JARVIS model (closest to MCU voice).
-    if _should_try_piper(cfg):
+    # 0. ElevenLabs (primary when configured). Irish flash voice.
+    if _should_try_elevenlabs(cfg):
+        model = getattr(cfg.voice, "elevenlabs_model", "") or "eleven_flash_v2_5"
+        voice_id = getattr(cfg.voice, "elevenlabs_voice_id", "") or "?"
+        try:
+            audio = await asyncio.to_thread(_synthesize_with_elevenlabs, text, cfg)
+            tts_log.info(
+                "ElevenLabs OK model=%s voice=%s bytes=%d chars=%d",
+                model, voice_id, len(audio), len(text),
+            )
+            return Response(audio, media_type="audio/mpeg", headers={"X-JARVIS-TTS": "elevenlabs"})
+        except Exception as e:  # noqa: BLE001
+            # When provider is pinned to elevenlabs, do NOT fall through to Edge
+            # (robot voice) â€” that caused mid-stream voice switches for Ryan.
+            if eleven_only:
+                tts_log.error("ElevenLabs TTS failed (%s) â€” no fallback (provider=elevenlabs)", e)
+                return JSONResponse(
+                    {"ok": False, "error": f"elevenlabs failed: {e}", "provider": "elevenlabs"},
+                    status_code=503,
+                    headers={"X-JARVIS-TTS": "elevenlabs-failed"},
+                )
+            tts_log.warning("ElevenLabs TTS failed (%s) â€” falling back", e)
+
+    # 1. Piper â€” community JARVIS model (closest to MCU voice).
+    if (not eleven_only) and _should_try_piper(cfg):
         try:
             audio = _synthesize_with_piper(text, cfg)
             return Response(audio, media_type="audio/wav", headers={"X-JARVIS-TTS": "piper"})
         except Exception as e:  # noqa: BLE001
-            tts_log.warning("Piper TTS failed (%s) — falling back", e)
+            tts_log.warning("Piper TTS failed (%s) â€” falling back", e)
 
     # 2. Riva (NVIDIA cloud)
-    if _should_try_riva(cfg):
+    if (not eleven_only) and _should_try_riva(cfg):
         try:
             audio = _synthesize_with_riva(text, cfg)
             return Response(audio, media_type="audio/wav", headers={"X-JARVIS-TTS": "riva"})
         except Exception as e:  # noqa: BLE001
-            tts_log.warning("Riva TTS failed (%s) — falling back to edge-tts", e)
+            tts_log.warning("Riva TTS failed (%s) â€” falling back to edge-tts", e)
 
-    # 3. Edge TTS (Microsoft Ryan / Thomas Neural)
-    voice = body.voice or cfg.voice.edge_voice or "en-GB-ThomasNeural"
-    rate  = cfg.voice.edge_rate  or "-6%"
-    pitch = cfg.voice.edge_pitch or "+0Hz"
-    try:
-        import edge_tts
-    except Exception as e:  # noqa: BLE001
+    if eleven_only:
+        tts_log.error("ElevenLabs unavailable and provider=elevenlabs â€” refusing Edge fallback")
         return JSONResponse(
-            {"ok": False, "error": f"edge-tts unavailable: {e}"},
+            {"ok": False, "error": "elevenlabs unavailable", "provider": "elevenlabs"},
             status_code=503,
+            headers={"X-JARVIS-TTS": "elevenlabs-unavailable"},
         )
 
-    async def stream_audio():
-        communicate = edge_tts.Communicate(text, voice=voice, rate=rate, pitch=pitch)
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                yield chunk["data"]
-
-    return StreamingResponse(
-        stream_audio(),
-        media_type="audio/mpeg",
-        headers={"X-JARVIS-TTS": "edge"},
+    # HARD RULE: Edge TTS permanently disabled. ElevenLabs only — never robot/Edge.
+    tts_log.error("Refusing Edge TTS fallback (elevenlabs-only policy)")
+    return JSONResponse(
+        {"ok": False, "error": "edge_tts disabled; elevenlabs-only", "provider": "elevenlabs"},
+        status_code=503,
+        headers={"X-JARVIS-TTS": "edge-disabled"},
     )
-
-
 # --- Piper TTS (local, closest match to MCU JARVIS) ------------------------
 _piper_voice = None
 _piper_failed = False
@@ -905,7 +953,7 @@ def _synthesize_with_piper(text: str, cfg) -> bytes:
         _piper_voice = PiperVoice.load(str(model_path))
 
     # piper-tts 1.4+ API: synthesize_wav writes a full WAV stream. Full
-    # prosody controls — length, noise, phoneme-timing variability, volume.
+    # prosody controls â€” length, noise, phoneme-timing variability, volume.
     from piper.config import SynthesisConfig  # type: ignore
     syn_cfg = SynthesisConfig(
         speaker_id=cfg.voice.piper_speaker if _piper_voice.config.num_speakers > 1 else None,
@@ -919,6 +967,45 @@ def _synthesize_with_piper(text: str, cfg) -> bytes:
     with wave.open(buf, "wb") as wf:
         _piper_voice.synthesize_wav(text, wf, syn_config=syn_cfg)
     return buf.getvalue()
+
+
+def _elevenlabs_api_key(cfg) -> str:
+    env_name = getattr(cfg.voice, "elevenlabs_api_key_env", "ELEVENLABS_API_KEY") or "ELEVENLABS_API_KEY"
+    return os.environ.get(env_name, "").strip()
+
+
+def _elevenlabs_available(cfg) -> bool:
+    return bool(_elevenlabs_api_key(cfg)) and bool(getattr(cfg.voice, "elevenlabs_voice_id", ""))
+
+
+def _should_try_elevenlabs(cfg) -> bool:
+    provider = (cfg.voice.provider or "auto").lower().strip()
+    if provider in ("elevenlabs", "eleven_labs"):
+        return True
+    return provider == "auto" and bool(getattr(cfg.voice, "elevenlabs_enabled", False))
+
+
+def _synthesize_with_elevenlabs(text: str, cfg) -> bytes:
+    api_key = _elevenlabs_api_key(cfg)
+    if not api_key:
+        raise RuntimeError("ELEVENLABS_API_KEY not set in .env")
+    voice_id = getattr(cfg.voice, "elevenlabs_voice_id", "") or "sgk995upfe3tYLvoGcBN"
+    model = getattr(cfg.voice, "elevenlabs_model", "") or "eleven_multilingual_v2"
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    headers = {
+        "xi-api-key": api_key,
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+    }
+    payload = {"text": text, "model_id": model}
+    with httpx.Client(timeout=20.0) as client:
+        resp = client.post(url, headers=headers, json=payload)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"elevenlabs HTTP {resp.status_code}: {resp.text[:200]}")
+        audio = resp.content
+        if not audio:
+            raise RuntimeError("elevenlabs returned empty audio")
+        return audio
 
 
 def _edge_tts_available() -> bool:
@@ -987,14 +1074,14 @@ def _get_riva_service(cfg):
         _riva_init_failed = True
         raise RuntimeError(
             "NVIDIA_API_KEY not set in .env. "
-            "Get a free key at https://build.nvidia.com → Generate API Key"
+            "Get a free key at https://build.nvidia.com â†’ Generate API Key"
         )
 
     # Check if user has a local Riva server configured
     server = cfg.voice.riva_server or ""
     if server and server != "localhost:50051" and "nvcf.nvidia.com" not in server:
-        # User has a custom local Riva server — use it directly
-        _riva_log.info("Connecting to local Riva TTS at %s …", server)
+        # User has a custom local Riva server â€” use it directly
+        _riva_log.info("Connecting to local Riva TTS at %s â€¦", server)
         try:
             auth = riva.client.Auth(uri=server)
         except Exception as e:
@@ -1002,7 +1089,7 @@ def _get_riva_service(cfg):
             raise RuntimeError(f"Local Riva connection failed ({server}): {e}") from e
     else:
         # Use NVIDIA cloud API
-        _riva_log.info("Connecting to NVIDIA Riva Cloud TTS …")
+        _riva_log.info("Connecting to NVIDIA Riva Cloud TTS â€¦")
         try:
             auth = riva.client.Auth(
                 use_ssl=True,
@@ -1143,7 +1230,7 @@ async def iframe_proxy(url: str = Query(..., min_length=8)):
             text = re.sub(r"(<head[^>]*>)", r"\1" + base_tag, text, count=1, flags=re.IGNORECASE)
         else:
             text = base_tag + text
-        # Remove the common "if (top !== self) top.location = …" bombs.
+        # Remove the common "if (top !== self) top.location = â€¦" bombs.
         text = re.sub(r"if\s*\(\s*(?:top|window\.top)\s*!?=+\s*(?:self|window)[\s\S]*?\)\s*[\s\S]*?;", "", text, count=4)
         return HTMLResponse(text, status_code=r.status_code, headers=out_headers)
 
@@ -1281,9 +1368,9 @@ async def set_mission(request: Request, body: MissionBody):
     return {"ok": True, "path": str(p)}
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  IMAGE ANALYSIS / IMG2IMG / IMAGE→3D  endpoints
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+#  IMAGE ANALYSIS / IMG2IMG / IMAGEâ†’3D  endpoints
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 _img_log = logging.getLogger("jarvis.image_api")
 
@@ -1297,7 +1384,7 @@ async def analyze_image(
     """Send an uploaded image to the LLM for vision analysis.
 
     The image is base64-encoded and attached as a multimodal content part
-    in the OpenAI vision format.  The orchestrator is bypassed — we talk
+    in the OpenAI vision format.  The orchestrator is bypassed â€” we talk
     directly to the LLMBrain so the response is synchronous JSON.
     """
     data = await file.read()
