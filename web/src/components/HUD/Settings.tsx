@@ -24,7 +24,6 @@ export default function Settings({
   const health = useStore((s) => s.health);
   const voiceEnabled = useStore((s) => s.voiceEnabled);
   const setVoiceEnabled = useStore((s) => s.setVoiceEnabled);
-  const voicePipeline = useStore((s) => s.voicePipeline);
   const setVoicePipeline = useStore((s) => s.setVoicePipeline);
   const convaiConnected = useStore((s) => s.convaiConnected);
   const micStatus = useStore((s) => s.micStatus);
@@ -74,34 +73,23 @@ export default function Settings({
         )}
 
         <Section title="VOICE">
-          <Toggle
-            label="Nexy voice (ElevenLabs Conversational AI)"
-            value={voicePipeline === "convai"}
-            onChange={(v) => {
-              setVoicePipeline(v ? "convai" : "legacy");
-              if (v && voiceEnabled) void startConvaiVoice({ reason: "settings" });
-              else if (!v) void stopConvaiVoice();
-            }}
-          />
-          <div className="text-[10px] text-jarvis-ice/45 pb-1">
-            ConvAI: Xbox mic → ElevenLabs agent → Irish Flash on Xbox headphones.
-            {voicePipeline === "convai" && (
-              <> Status: {convaiConnected ? "connected" : "offline"} {micStatus ? `· ${micStatus}` : ""}</>
-            )}
+          <div className="text-[10px] text-jarvis-cyan/80 pb-2">
+            Nexy duplex: ElevenLabs ConvAI · Xbox mic → Irish Flash on Xbox headphones.
+            <br />
+            Status: {convaiConnected ? "connected" : "offline"} {micStatus ? `· ${micStatus}` : ""}
           </div>
           <Toggle
             label="JARVIS speaks aloud (TTS)"
             value={voiceEnabled}
             onChange={(v) => {
               setVoiceEnabled(v);
-              if (voicePipeline === "convai") {
-                if (v) void startConvaiVoice({ reason: "voice-toggle" });
-                else void stopConvaiVoice();
-              }
+              setVoicePipeline("convai");
+              if (v) void startConvaiVoice({ reason: "voice-toggle" });
+              else void stopConvaiVoice();
             }}
           />
           <Toggle
-            label={voicePipeline === "convai" ? "Keep Nexy voice session active" : "Listen for wake word (mic always on)"}
+            label="Keep Nexy ConvAI session active (Xbox duplex)"
             value={wakeEnabled}
             onChange={(v) => { if (v) { void armMic(); } else { disarmMic(); } }}
           />

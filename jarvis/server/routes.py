@@ -182,9 +182,18 @@ NVIDIA_WAVEGLOW_URL = (
 
 
 @router.post("/stt")
-async def speech_to_text(audio: UploadFile = File(...)):
+async def speech_to_text(request: Request, audio: UploadFile = File(...)):
     """Receive audio from browser MediaRecorder, transcribe with Whisper."""
     import asyncio
+
+    cfg = request.app.state.cfg
+    if getattr(cfg.voice, "convai_enabled", True):
+        _stt_log.info("STT: rejected — ConvAI duplex is primary voice path")
+        return JSONResponse(
+            {"text": "", "skipped": "convai_primary", "error": "Use ElevenLabs ConvAI, not /api/stt"},
+            status_code=409,
+        )
+
     data = await audio.read()
     if not data:
         return JSONResponse({"text": "", "error": "empty audio"}, status_code=400)

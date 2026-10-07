@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore, nextId, type ChatAttachment } from "../../lib/store";
 import { wsClient } from "../../lib/ws";
-import { mic } from "../../lib/voice";
+import { armMic, disarmMic } from "../../lib/micControl";
 import ImageActions from "./ImageActions";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -83,27 +83,9 @@ export default function CommandBar() {
 
   const toggleMic = async () => {
     if (micEnabled) {
-      mic.stop();
-      setWakeEnabled(false);
+      disarmMic();
     } else {
-      setWakeEnabled(true);
-      await mic.start(
-        (text, isFinal) => {
-          if (isFinal && text.trim()) {
-            const trimmed = text.trim();
-            pushChat({ id: nextId(), role: "user", text: trimmed, ts: Date.now() });
-            wsClient.chat(trimmed);
-            setValue("");
-          } else {
-            setValue(text);
-          }
-        },
-        (phrase) => {
-          console.log("wake phrase:", phrase);
-          // Bring the Electron window forward (or pop the widget) on wake.
-          try { (window as any).jarvis?.send?.("jarvis:wake"); } catch { /* noop */ }
-        }
-      );
+      await armMic();
     }
   };
 
@@ -253,7 +235,7 @@ export default function CommandBar() {
 
       {(wakeEnabled || micStatus) && (
         <div className="px-3 pb-1.5 text-[10px] text-mono text-jarvis-cyan/50 shrink-0">
-          {micStatus ? `mic: ${micStatus}` : 'listening · say "Hey JARVIS" to wake'}
+          {micStatus ? `mic: ${micStatus}` : 'listening · say "Hey Nexy" to wake'}
         </div>
       )}
     </div>

@@ -9,6 +9,7 @@
  *     so we can detect the user's intended anchor (left / right / center /
  *     bottom) and re-place the panel correctly when the window grows or
  *     shrinks later.
+ *   • `hidden` persists close/hide; use showPanel() or the Panels menu to restore.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -19,7 +20,7 @@ import {
 } from "../../lib/layoutBroker";
 
 export interface Box { x: number; y: number; w: number; h: number }
-interface SavedBox extends Box { vw?: number; vh?: number }
+interface SavedBox extends Box { vw?: number; vh?: number; hidden?: boolean }
 
 interface Props {
   id: string;
@@ -33,10 +34,44 @@ interface Props {
   z?: number;
   /** track content height — disables vertical resize, height auto-grows */
   autoHeight?: boolean;
+  /** shown in Panels menu when this panel is hidden */
+  label?: string;
+  /** called after user closes the panel (e.g. sync local open toggles) */
+  onHide?: () => void;
 }
 
 const STORAGE_PREFIX = "jarvis.floating.v2.";
+const VISIBILITY_EVENT = "jarvis:panel-visibility";
 const ANCHOR_PX = 96;
+
+/** Human labels for bring-back UI (id → title). */
+export const PANEL_LABELS: Record<string, string> = {
+  diag: "Diagnostics",
+  uptime: "Uptime",
+  subs: "Subsystems",
+  terminal: "Terminal",
+  chat: "Chat",
+  mission: "Mission log",
+  toolFeed: "Tool feed",
+  swarm: "Swarm",
+  plan: "Plan",
+  settings: "Settings",
+  "reader.pinned": "Reader (pinned)",
+  "hub.images": "Image gen",
+  "hub.videos": "Videos",
+  "hub.websearch": "Web search",
+  "hub.news": "News",
+  "hub.imagesearch": "Image search",
+  "hub.pages": "Pages",
+  "hub.webcam": "Camera",
+  "hub.memory": "Memory",
+  "hub.model3d": "3D models",
+  cmd: "Command bar",
+};
+
+export function panelLabel(id: string): string {
+  return PANEL_LABELS[id] ?? id;
+}
 
 function loadStoredBox(id: string): SavedBox | null {
   try {
@@ -55,6 +90,70 @@ function loadStoredBox(id: string): SavedBox | null {
   return null;
 }
 
+export function isPanelHidden(id: string): boolean {
+  return loadStoredBox(id)?.hidden === true;
+}
+
+export function listHiddenPanelIds(): string[] {
+  try {
+    return Object.keys(localStorage)
+      .filter((k) => k.startsWith(STORAGE_PREFIX))
+      .map((k) => k.slice(STORAGE_PREFIX.length))
+      .filter((id) => loadStoredBox(id)?.hidden === true);
+  } catch {
+    return [];
+  }
+}
+
+function emitVisibility(id: string, hidden: boolean) {
+  try {
+    window.dispatchEvent(new CustomEvent(VISIBILITY_EVENT, { detail: { id, hidden } }));
+  } catch { /* ignore */ }
+}
+
+/** Show a previously hidden panel (does not mount it — App must render Floating). */
+export function showPanel(id: string) {
+  const stored = loadStoredBox(id);
+  if (stored) {
+    const next: SavedBox = { ...stored, hidden: false };
+    try { localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(next)); } catch { /* ignore */ }
+  }
+  emitVisibility(id, false);
+}
+
+/** Hide panel and persist layout; parent should unmount Floating when hidden. */
+export function hidePanel(id: string) {
+  const stored = loadStoredBox(id);
+  if (!stored) return;
+  const next: SavedBox = { ...stored, hidden: true };
+  try { localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(next)); } catch { /* ignore */ }
+  emitVisibility(id, true);
+}
+
+export function usePanelVisible(id: string, defaultVisible = true): boolean {
+  const [visible, setVisible] = useState(() => defaultVisible && !isPanelHidden(id));
+  useEffect(() => {
+    const onVis = (e: Event) => {
+      const d = (e as CustomEvent<{ id: string; hidden: boolean }>).detail;
+      if (d?.id !== id) return;
+      setVisible(!d.hidden);
+    };
+    window.addEventListener(VISIBILITY_EVENT, onVis);
+    return () => window.removeEventListener(VISIBILITY_EVENT, onVis);
+  }, [id]);
+  return visible;
+}
+
+export function useHiddenPanelIds(): string[] {
+  const [ids, setIds] = useState(() => listHiddenPanelIds());
+  useEffect(() => {
+    const refresh = () => setIds(listHiddenPanelIds());
+    window.addEventListener(VISIBILITY_EVENT, refresh);
+    return () => window.removeEventListener(VISIBILITY_EVENT, refresh);
+  }, []);
+  return ids;
+}
+
 function loadBox(id: string, fallback: Box): SavedBox {
   // Existing user-intent layout wins ONLY if it doesn't collide with any
   // already-registered panel. If a stored layout would overlap something
@@ -64,6 +163,12 @@ function loadBox(id: string, fallback: Box): SavedBox {
   const vw = typeof window !== "undefined" ? window.innerWidth : 1600;
   const vh = typeof window !== "undefined" ? window.innerHeight : 900;
   if (stored) {
+    // Drop corrupt viewport stamps from older race conditions (widget-sized
+    // vw/vh written while full-HUD panels were still mounted).
+    if (typeof stored.vw === "number" && stored.vw < 900) {
+      delete stored.vw;
+      delete stored.vh;
+    }
     const display = computeDisplay(stored, vw, vh);
     if (!collidesAnything(id, display)) {
       updateSlot(id, display);
@@ -78,12 +183,34 @@ function loadBox(id: string, fallback: Box): SavedBox {
   return { ...slot, vw, vh };
 }
 
-function saveBox(id: string, box: Box) {
+function saveBox(id: string, box: Box | SavedBox) {
+  // Prefer explicit vw/vh stamped at drag/resize end. Never overwrite a
+  // previously-saved viewport just because content height settled mid-resize
+  // (e.g. window shrinking toward widget mode before Floating unmounts) —
+  // that was stamping the tiny viewport into localStorage and making panels
+  // look "reset" after the next full-HUD restore.
+  const prev = loadStoredBox(id);
+  const stamped = box as SavedBox;
   const record: SavedBox = {
-    ...box,
-    vw: typeof window !== "undefined" ? window.innerWidth : undefined,
-    vh: typeof window !== "undefined" ? window.innerHeight : undefined,
+    x: box.x,
+    y: box.y,
+    w: box.w,
+    h: box.h,
+    vw: stamped.vw ?? prev?.vw ?? (typeof window !== "undefined" ? window.innerWidth : undefined),
+    vh: stamped.vh ?? prev?.vh ?? (typeof window !== "undefined" ? window.innerHeight : undefined),
+    hidden: stamped.hidden ?? prev?.hidden,
   };
+  // Ignore corrupt tiny-viewport stamps left by older builds / race conditions.
+  if (typeof record.vw === "number" && record.vw < 900) {
+    record.vw = prev?.vw && prev.vw >= 900
+      ? prev.vw
+      : (typeof window !== "undefined" && window.innerWidth >= 900 ? window.innerWidth : record.vw);
+  }
+  if (typeof record.vh === "number" && record.vh < 500) {
+    record.vh = prev?.vh && prev.vh >= 500
+      ? prev.vh
+      : (typeof window !== "undefined" && window.innerHeight >= 500 ? window.innerHeight : record.vh);
+  }
   try { localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(record)); } catch { /* ignore */ }
 }
 
@@ -150,6 +277,8 @@ export default function Floating({
   locked = false,
   z = 20,
   autoHeight = false,
+  label,
+  onHide,
 }: Props) {
   // `saved` is the user-intent box (only mutated by drag/resize end).
   const [saved, setSaved] = useState<SavedBox>(() => loadBox(id, defaultBox));
@@ -166,6 +295,12 @@ export default function Floating({
   const dragRef = useRef<{ startX: number; startY: number; orig: Box } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; orig: Box } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  const onClose = useCallback(() => {
+    saveBox(id, { ...(transient ?? saved), hidden: true });
+    emitVisibility(id, true);
+    onHide?.();
+  }, [id, saved, transient, onHide]);
 
   // Window resize — update viewport state ONLY. Do not touch saved.
   useEffect(() => {
@@ -301,6 +436,8 @@ export default function Floating({
     });
   }, []);
 
+  const closeTitle = label ?? panelLabel(id);
+
   return (
     <div
       data-floating-id={id}
@@ -336,6 +473,16 @@ export default function Floating({
             <span className="w-1 h-1 rounded-full bg-jarvis-ice/70" />
             <span className="w-1 h-1 rounded-full bg-jarvis-ice/70" />
           </div>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            title={`Hide ${closeTitle}`}
+            className="absolute right-1 top-0.5 w-5 h-5 rounded flex items-center justify-center text-[13px] leading-none text-jarvis-ice/50 hover:text-jarvis-ice hover:bg-jarvis-danger/15 transition-all"
+            style={{ opacity: focused ? 1 : 0.35 }}
+          >
+            ×
+          </button>
         </div>
       )}
 

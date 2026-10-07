@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../../lib/store";
 import { wsClient } from "../../lib/ws";
-import { mic } from "../../lib/voice";
+import { armMic, disarmMic } from "../../lib/micControl";
 import { nextId } from "../../lib/store";
 
 const jarvisIpc = (channel: string, payload?: unknown) => {
@@ -64,19 +64,9 @@ export default function Widget() {
 
   const toggleMic = async () => {
     if (micEnabled) {
-      mic.stop();
+      disarmMic();
     } else {
-      await mic.start(
-        (txt, isFinal) => {
-          if (isFinal && txt.trim()) {
-            pushChat({ id: nextId(), role: "user", text: txt.trim(), ts: Date.now() });
-            wsClient.chat(txt.trim());
-          } else {
-            setDraft(txt);
-          }
-        },
-        () => { jarvisIpc("jarvis:wake"); },
-      );
+      await armMic();
     }
   };
 

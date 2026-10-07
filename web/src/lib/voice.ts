@@ -156,7 +156,7 @@ function trackLabelIsXboxMic(label: string): boolean {
  * Old code refused getUserMedia until Xbox ids were already known — mic/TTS never started.
  * Opens Xbox mic only; verifies track label; never leaves fifine/other devices active.
  */
-async function grantXboxMicPermissionForLabels(): Promise<boolean> {
+export async function grantXboxMicPermissionForLabels(): Promise<boolean> {
   await loadForcedAudioHints();
   if (!navigator.mediaDevices?.getUserMedia) return false;
 
@@ -216,6 +216,64 @@ export function getActiveXboxAudio(): XboxAudioDevices {
 }
 
 export { ensureXboxDevicesResolved };
+
+/** ConvAI/WebRTC setSinkId fails on pseudo ids — require concrete Xbox endpoint ids. */
+export async function resolveConvaiXboxDevices(): Promise<XboxAudioDevices> {
+  await grantXboxMicPermissionForLabels();
+  let x = await ensureXboxDevicesResolved();
+  if (!navigator.mediaDevices?.enumerateDevices) return x;
+
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const needConcrete = (id?: string) => !id || PSEUDO_DEVICE_IDS.has(id);
+
+  if (needConcrete(x.sinkId)) {
+    const sink =
+      devices.find(
+        (d) =>
+          d.kind === "audiooutput" &&
+          deviceAllowed(d) &&
+          /headphones\s*\(\s*xbox\s*controller\s*\)/i.test(d.label) &&
+          isConcreteDeviceId(d.deviceId),
+      ) ||
+      devices.find(
+        (d) =>
+          d.kind === "audiooutput" &&
+          deviceAllowed(d) &&
+          XBOX_PLAY_RE.test(d.label) &&
+          isConcreteDeviceId(d.deviceId),
+      );
+    if (sink) {
+      x = { ...x, sinkId: sink.deviceId, sinkLabel: sink.label, ok: Boolean(x.micId && sink.deviceId) };
+      saveXboxAudioCache(x.micId, sink.deviceId);
+    }
+  }
+
+  if (needConcrete(x.micId)) {
+    const mic =
+      devices.find(
+        (d) =>
+          d.kind === "audioinput" &&
+          deviceAllowed(d) &&
+          /headset\s*microphone\s*\(\s*xbox\s*controller\s*\)/i.test(d.label) &&
+          isConcreteDeviceId(d.deviceId),
+      ) ||
+      devices.find(
+        (d) => d.kind === "audioinput" && deviceAllowed(d) && XBOX_MIC_RE.test(d.label) && isConcreteDeviceId(d.deviceId),
+      );
+    if (mic) {
+      x = { ...x, micId: mic.deviceId, micLabel: mic.label, ok: Boolean(mic.deviceId && x.sinkId) };
+      saveXboxAudioCache(mic.deviceId, x.sinkId);
+    }
+  }
+
+  lastXboxAudio = x;
+  if (x.ok && x.sinkId && x.micId && !needConcrete(x.sinkId) && !needConcrete(x.micId)) {
+    useStore.getState().setMicStatus(`ConvAI Xbox: ${x.sinkLabel} / ${x.micLabel}`);
+  } else if (!x.sinkId || !x.micId) {
+    useStore.getState().setMicStatus("Xbox concrete device ids missing for ConvAI");
+  }
+  return x;
+}
 
 /** Public filtered device list — Xbox only. Never surfaces blocked devices. */
 export async function listAllowedAudioDevices(): Promise<{
@@ -295,7 +353,7 @@ async function resolveXboxAudioDevices(): Promise<XboxAudioDevices> {
       sink?.label || "NONE",
       refused.length,
     );
-    if (ok) {
+    if (ok && useStore.getState().voicePipeline === "legacy") {
       useStore.getState().setMicStatus(`Xbox: ${sink!.label} / ${mic!.label}`);
     }
     return lastXboxAudio;
@@ -961,6 +1019,11 @@ export class JarvisMic {
   }
 
   async start(onTranscript: (text: string, isFinal: boolean) => void, onWake?: (phrase: string) => void) {
+    if (useStore.getState().voicePipeline !== "legacy") {
+      console.warn("[STT] legacy JarvisMic blocked — use ElevenLabs ConvAI duplex");
+      useStore.getState().setMicStatus("Legacy mic off — Nexy ConvAI only");
+      return;
+    }
     if (this._wantListening) return;
     this._wantListening = true;
     this._onTranscript = onTranscript;
@@ -1328,6 +1391,9 @@ export const mic = new JarvisMic();
 
 /** Electron HUD helpers — unlock HTMLAudio + force-speak without Edge. */
 export async function unlockHudAudio(): Promise<void> {
+  if (useStore.getState().voicePipeline !== "legacy") {
+    return;
+  }
   try {
     await loadForcedAudioHints();
     if (playerAudio) {

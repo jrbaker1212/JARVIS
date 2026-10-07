@@ -21,6 +21,8 @@ const http = require("http");
 
 // Allow HTMLAudioElement.play() / TTS without a prior user gesture (Electron HUD).
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+// ConvAI WebRTC in Electron
+app.commandLine.appendSwitch("enable-features", "WebRtcAllowInputVolumeAdjustment");
 
 const BACKEND_PORT = process.env.JARVIS_PORT ? parseInt(process.env.JARVIS_PORT, 10) : 7341;
 const BACKEND_URL  = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -459,39 +461,76 @@ async function loadApp() {
   }
   mainWindow.loadURL(BACKEND_URL);
 
+  mainWindow.webContents.once("dom-ready", () => {
+    const patchStore = `
+      try {
+        const k = "jarvis.store.v1";
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const p = JSON.parse(raw);
+          if (p && p.state) {
+            p.state.voicePipeline = "convai";
+            p.state.voiceEnabled = true;
+            localStorage.setItem(k, JSON.stringify(p));
+          }
+        }
+      } catch (e) { console.warn("[electron] convai store patch", e); }
+    `;
+    mainWindow.webContents.executeJavaScript(patchStore).catch(() => undefined);
+  });
+
   mainWindow.webContents.once("did-finish-load", () => {
     try { mainWindow.show(); mainWindow.focus(); } catch { /* noop */ }
-    // Unlock media pipeline, then optional one-shot TTS smoke if flag file exists.
-    const flagPath = path.join(PROJECT_ROOT, "data", "tts-smoke.flag");
-    const wantSmoke = fs.existsSync(flagPath);
-    if (wantSmoke) {
-      try { fs.unlinkSync(flagPath); } catch { /* noop */ }
-    }
+    const proofPath = path.join(PROJECT_ROOT, "data", "convai-live-proof.json");
     const js = `
       (async () => {
+        const out = { at: new Date().toISOString(), steps: [] };
+        const force = globalThis.__jarvisForceConvaiStart;
+        const start = globalThis.__jarvisConvaiStart;
+        const diag = globalThis.__jarvisConvaiDiag;
         try {
-          if (typeof window.__jarvisUnlockAudio === "function") {
-            await window.__jarvisUnlockAudio();
-          } else {
-            const silent = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
-            silent.volume = 0.01;
-            await silent.play().catch(() => {});
-            silent.pause();
+          const st = await fetch("/api/convai/status").then(r => r.json()).catch(() => ({}));
+          out.convaiStatus = st;
+          out.steps.push("status");
+          out.helpers = {
+            force: typeof force === "function",
+            start: typeof start === "function",
+            diag: typeof diag === "function",
+          };
+          if (st && st.enabled !== false && typeof force === "function") {
+            out.force = await force();
+            out.steps.push("forceConvai");
+          } else if (typeof start === "function") {
+            out.start = await start();
+            out.steps.push("convaiStart");
           }
-          if (window.AudioContext || window.webkitAudioContext) {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            await ctx.resume().catch(() => {});
-            try { await ctx.close(); } catch {}
+          if (typeof diag === "function") {
+            out.diag = await diag();
+            out.steps.push("diag");
           }
-          console.log("[electron] audio unlock attempted");
-        } catch (e) { console.warn("[electron] audio unlock failed", e); }
-        if (${wantSmoke ? "true" : "false"} && typeof window.__jarvisSpeak === "function") {
-          console.log("[electron] TTS smoke speak");
-          window.__jarvisSpeak("Testing. Can you hear me Ryan?");
+          out.audibleProof = Boolean(
+            out.force?.speaking || out.force?.connected || out.diag?.sawAgentSpeaking
+          );
+        } catch (e) {
+          out.error = String(e);
         }
+        return out;
       })();
     `;
-    mainWindow.webContents.executeJavaScript(js).catch((e) => console.warn("[electron] unlock js failed", e));
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents
+        .executeJavaScript(js)
+        .then((result) => {
+          try {
+            fs.writeFileSync(proofPath, JSON.stringify(result, null, 2));
+            console.log("[electron] convai live proof written", proofPath);
+          } catch (e) {
+            console.warn("[electron] convai proof write failed", e);
+          }
+        })
+        .catch((e) => console.warn("[electron] convai autostart js failed", e));
+    }, 22000);
   });
 }
 

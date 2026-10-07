@@ -37,8 +37,8 @@ const Lightbox      = lazy(() => import("./components/Media/Lightbox"));
 const ArticleReader = lazy(() => import("./components/Media/ArticleReader"));
 import { getHealth } from "./lib/api";
 import { useStore, nextId, type MediaKind } from "./lib/store";
-import { refreshVoiceProfile, streamSpeak, unlockHudAudio } from "./lib/voice";
-import { startConvaiVoice } from "./lib/convaiVoice";
+import { refreshVoiceProfile, streamSpeak } from "./lib/voice";
+import { forceConvaiAndStart, startConvaiVoice } from "./lib/convaiVoice";
 import { armMic } from "./lib/micControl";
 import { wsClient } from "./lib/ws";
 
@@ -186,11 +186,9 @@ export default function App() {
   useEffect(() => {
     wsClient.connect();
     refreshVoiceProfile();
-    if (useStore.getState().voicePipeline === "convai") {
-      void startConvaiVoice({ reason: "app-boot" });
-    } else {
-      void unlockHudAudio();
-    }
+    useStore.getState().setVoicePipeline("convai");
+    useStore.getState().setVoiceEnabled(true);
+    void forceConvaiAndStart({ reason: "app-boot" });
     getHealth().then(setHealth).catch(() => undefined);
     const id = setInterval(() => {
       getHealth().then(setHealth).catch(() => undefined);
@@ -209,12 +207,15 @@ export default function App() {
   // Restore wake-word listening after cold start when the user left it on.
   useEffect(() => {
     const tryArm = () => {
-      const st = useStore.getState();
-      if (st.voicePipeline === "convai") {
-        if (st.voiceEnabled && !st.convaiConnected) void startConvaiVoice({ reason: "hydrate" });
-        return;
+      useStore.getState().setVoicePipeline("convai");
+      useStore.getState().setVoiceEnabled(true);
+      if ((window as unknown as { jarvis?: unknown }).jarvis) {
+        void forceConvaiAndStart({ reason: "electron-hydrate" });
+      } else if (!useStore.getState().convaiConnected) {
+        void startConvaiVoice({ reason: "hydrate" });
+      } else if (useStore.getState().wakeEnabled) {
+        void armMic();
       }
-      if (st.wakeEnabled && !st.micEnabled) void armMic();
     };
     const unsub = useStore.persist.onFinishHydration(tryArm);
     if (useStore.persist.hasHydrated()) tryArm();
@@ -239,11 +240,7 @@ export default function App() {
       if (visible) {
         console.log("[App] window visible — ws reconnect");
         wsClient.reconnect();
-        if (useStore.getState().voicePipeline === "convai") {
-          void startConvaiVoice({ reason: "window-visible" });
-        } else {
-          void unlockHudAudio();
-        }
+        void forceConvaiAndStart({ reason: "window-visible" });
       }
     });
     return () => { offMode?.(); offVis?.(); };
@@ -265,6 +262,7 @@ export default function App() {
     let lastId = "";
     let lastFingerprint = "";
     return useStore.subscribe((state) => {
+      if (state.voicePipeline === "convai") return;
       const last = state.chat[state.chat.length - 1];
       if (!last || last.role !== "assistant") return;
       if (last.id !== lastId) {
@@ -294,6 +292,7 @@ export default function App() {
   const booted = useStore((s) => s.booted);
   const greetedRef = useRef(false);
   useEffect(() => {
+    if (useStore.getState().voicePipeline === "convai") return;
     if (!booted || greetedRef.current) return;
     greetedRef.current = true;
     const h = new Date().getHours();
