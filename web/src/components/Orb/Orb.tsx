@@ -1,10 +1,9 @@
 ﻿/**
- * JARVIS orb shell — React Three Fiber + WireframeGeometry lat/long lattice.
+ * JARVIS orb — React shell around ethanplusai/jarvis particle engine (jarvisOrb.ts).
  */
-import { Canvas } from "@react-three/fiber";
-import { Suspense } from "react";
+import { useEffect, useRef } from "react";
 import { useStore, type OrbState } from "../../lib/store";
-import OrbGlobe from "./OrbGlobe";
+import { createJarvisOrb } from "./jarvisOrb";
 
 const STATE_CAPTION: Record<OrbState, string> = {
   idle: "",
@@ -14,26 +13,32 @@ const STATE_CAPTION: Record<OrbState, string> = {
 };
 
 export default function Orb() {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const orbState = useStore((s) => s.orbState);
   const caption = STATE_CAPTION[orbState];
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    const canvas = canvasRef.current;
+    if (!stage || !canvas) return;
+
+    const orb = createJarvisOrb(canvas, stage, {
+      getOrbState: () => useStore.getState().orbState,
+      getAudioLevel: () => useStore.getState().audioLevel,
+    });
+
+    return () => orb.destroy();
+  }, []);
 
   return (
     <div className="absolute inset-0 z-[5] pointer-events-none flex flex-col items-center justify-center">
       <div
-        className="relative w-[clamp(280px,38vmin,560px)] aspect-square rounded-full overflow-hidden"
-        style={{ background: "radial-gradient(circle, rgba(11,15,26,0.2) 0%, #0b0f1a 72%)" }}
+        ref={stageRef}
+        className="relative w-[clamp(280px,38vmin,560px)] aspect-square overflow-hidden rounded-full"
+        style={{ background: "#0b0f1a" }}
       >
-        <Canvas
-          dpr={[1, 2]}
-          gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
-          camera={{ position: [0, 0, 2.65], fov: 42, near: 0.1, far: 20 }}
-          style={{ background: "transparent" }}
-        >
-          <color attach="background" args={["#0b0f1a"]} />
-          <Suspense fallback={null}>
-            <OrbGlobe />
-          </Suspense>
-        </Canvas>
+        <canvas ref={canvasRef} className="block h-full w-full" aria-hidden />
       </div>
 
       <div className="mt-2 flex flex-col items-center gap-0.5 text-center">
