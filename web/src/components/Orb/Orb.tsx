@@ -7,42 +7,34 @@ import { useStore, type OrbState } from "../../lib/store";
 
 const PALETTE: Record<
   OrbState,
-  { node: string; line: string; core: string; speed: number; intensity: number; link: number; breathe: number }
+  { node: string; core: string; speed: number; intensity: number; breathe: number }
 > = {
   idle: {
     node: "#5ee9ff",
-    line: "rgba(0, 212, 255, 0.28)",
     core: "#e8fcff",
     speed: 0.35,
-    intensity: 0.82,
-    link: 0.34,
+    intensity: 0.88,
     breathe: 1,
   },
   listening: {
     node: "#7df9ff",
-    line: "rgba(94, 233, 255, 0.42)",
     core: "#ffffff",
     speed: 0.55,
-    intensity: 1.05,
-    link: 0.36,
+    intensity: 1.08,
     breathe: 1.15,
   },
   thinking: {
     node: "#22d3ee",
-    line: "rgba(34, 211, 238, 0.48)",
     core: "#ffffff",
     speed: 1.05,
-    intensity: 1.18,
-    link: 0.38,
+    intensity: 1.22,
     breathe: 1.25,
   },
   speaking: {
     node: "#a5f3fc",
-    line: "rgba(125, 249, 255, 0.52)",
     core: "#ffffff",
     speed: 0.65,
-    intensity: 1.35,
-    link: 0.37,
+    intensity: 1.38,
     breathe: 1.4,
   },
 };
@@ -54,7 +46,8 @@ const STATE_CAPTION: Record<OrbState, string> = {
   speaking: "speaking…",
 };
 
-const PARTICLE_COUNT = 260;
+const PARTICLE_COUNT = 320;
+const NEIGHBORS = 5;
 
 type Particle = {
   bx: number;
@@ -64,15 +57,27 @@ type Particle = {
   size: number;
 };
 
-function buildLinks(parts: Particle[], maxDist: number): [number, number][] {
-  const maxD2 = maxDist * maxDist;
+function buildKnnLinks(parts: Particle[], k: number): [number, number][] {
+  const set = new Set<string>();
   const links: [number, number][] = [];
   for (let i = 0; i < parts.length; i++) {
-    for (let j = i + 1; j < parts.length; j++) {
+    const dists: { j: number; d2: number }[] = [];
+    for (let j = 0; j < parts.length; j++) {
+      if (i === j) continue;
       const dx = parts[i].bx - parts[j].bx;
       const dy = parts[i].by - parts[j].by;
       const dz = parts[i].bz - parts[j].bz;
-      if (dx * dx + dy * dy + dz * dz <= maxD2) links.push([i, j]);
+      dists.push({ j, d2: dx * dx + dy * dy + dz * dz });
+    }
+    dists.sort((a, b) => a.d2 - b.d2);
+    for (let n = 0; n < Math.min(k, dists.length); n++) {
+      const j = dists[n].j;
+      const a = Math.min(i, j);
+      const b = Math.max(i, j);
+      const key = `${a}:${b}`;
+      if (set.has(key)) continue;
+      set.add(key);
+      links.push([a, b]);
     }
   }
   return links;
@@ -87,13 +92,13 @@ function fibonacciSphere(n: number, r: number): Particle[] {
     const theta = golden * i;
     const x = Math.cos(theta) * rad;
     const z = Math.sin(theta) * rad;
-    const jitter = 0.04 + Math.random() * 0.06;
+    const shell = 0.88 + Math.random() * 0.14;
     out.push({
-      bx: x * r * (0.92 + jitter * 0.3),
-      by: y * r * (0.92 + jitter * 0.3),
-      bz: z * r * (0.92 + jitter * 0.3),
+      bx: x * r * shell,
+      by: y * r * shell,
+      bz: z * r * shell,
       phase: Math.random() * Math.PI * 2,
-      size: 0.55 + Math.random() * 1.1,
+      size: 0.9 + Math.random() * 1.4,
     });
   }
   return out;
@@ -107,54 +112,51 @@ function hexToRgb(hex: string): [number, number, number] {
 
 export default function Orb() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
+  /** Inner orb stage — must match canvas layout box (NOT full-screen wrap). */
+  const stageRef = useRef<HTMLDivElement>(null);
   const particlesRef = useRef<Particle[] | null>(null);
   const linksRef = useRef<[number, number][]>([]);
   const smoothRef = useRef({
     speed: PALETTE.idle.speed,
     intensity: PALETTE.idle.intensity,
     audio: 0,
-    link: PALETTE.idle.link,
     breathe: PALETTE.idle.breathe,
   });
   const orbState = useStore((s) => s.orbState);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
+    const stage = stageRef.current;
+    if (!canvas || !stage) return;
 
     const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
     let raf = 0;
-    let t0 = performance.now();
     let w = 0;
     let h = 0;
     let dpr = 1;
 
     const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const rect = wrap.getBoundingClientRect();
-      w = Math.max(280, rect.width);
-      h = Math.max(280, rect.height);
+      const rect = stage.getBoundingClientRect();
+      w = Math.max(1, rect.width);
+      h = Math.max(1, rect.height);
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const radius = Math.min(w, h) * 0.36;
+
+      const radius = Math.min(w, h) * 0.38;
       const parts = fibonacciSphere(PARTICLE_COUNT, radius);
       particlesRef.current = parts;
-      linksRef.current = buildLinks(parts, radius * 0.38);
+      linksRef.current = buildKnnLinks(parts, NEIGHBORS);
     };
 
     resize();
     const ro = new ResizeObserver(resize);
-    ro.observe(wrap);
+    ro.observe(stage);
 
     const draw = (now: number) => {
-      t0 = now;
       const st = useStore.getState();
       const pal = PALETTE[st.orbState];
       const sm = smoothRef.current;
@@ -162,11 +164,10 @@ export default function Orb() {
       sm.speed += (pal.speed - sm.speed) * k;
       sm.intensity += (pal.intensity * (1 + st.audioLevel * 0.55) - sm.intensity) * k;
       sm.audio += (st.audioLevel - sm.audio) * k * 2.2;
-      sm.link += (pal.link - sm.link) * k;
       sm.breathe += (pal.breathe - sm.breathe) * k;
 
       const parts = particlesRef.current;
-      if (!parts) {
+      if (!parts || w < 8 || h < 8) {
         raf = requestAnimationFrame(draw);
         return;
       }
@@ -177,21 +178,10 @@ export default function Orb() {
       const rotY = time * sm.speed * 0.9;
       const rotX = time * sm.speed * 0.35 + 0.4;
       const audioPulse = sm.audio * 0.22;
-      const breathe = 1 + Math.sin(time * 1.6 * sm.breathe) * 0.035 + audioPulse;
+      const breathe = 1 + Math.sin(time * 1.6 * sm.breathe) * 0.04 + audioPulse;
+      const sizeScale = Math.max(1, Math.min(w, h) / 280);
 
       ctx.clearRect(0, 0, w, h);
-
-      // Soft core bloom (canvas layer)
-      const coreR = Math.min(w, h) * (0.14 + sm.audio * 0.06);
-      const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 2.8);
-      bloom.addColorStop(0, `rgba(255,255,255,${0.55 * sm.intensity + sm.audio * 0.35})`);
-      bloom.addColorStop(0.2, `rgba(125,249,255,${0.35 * sm.intensity})`);
-      bloom.addColorStop(0.55, `rgba(0,212,255,${0.12 * sm.intensity})`);
-      bloom.addColorStop(1, "rgba(11,15,26,0)");
-      ctx.fillStyle = bloom;
-      ctx.beginPath();
-      ctx.arc(cx, cy, coreR * 2.8, 0, Math.PI * 2);
-      ctx.fill();
 
       const sinY = Math.sin(rotY);
       const cosY = Math.cos(rotY);
@@ -209,12 +199,10 @@ export default function Orb() {
         let y = p.by * breathe + wobble * 0.015 * p.by;
         let z = p.bz * breathe + wobble * 0.015 * p.bz;
 
-        // Y rotation
         const x1 = x * cosY - z * sinY;
         const z1 = x * sinY + z * cosY;
         x = x1;
         z = z1;
-        // X rotation
         const y2 = y * cosX - z * sinX;
         const z2 = y * sinX + z * cosX;
         y = y2;
@@ -226,7 +214,7 @@ export default function Orb() {
           y: cy + y * perspective,
           z,
           i,
-          size: p.size * perspective * (0.85 + sm.audio * 0.35),
+          size: p.size * perspective * sizeScale * (0.95 + sm.audio * 0.4),
         });
       }
 
@@ -236,47 +224,60 @@ export default function Orb() {
       const byIndex = new Map<number, (typeof projected)[0]>();
       for (const p of projected) byIndex.set(p.i, p);
 
-      // Neural wireframe links (precomputed 3D adjacency)
+      ctx.globalCompositeOperation = "lighter";
+
       ctx.lineCap = "round";
       for (const [ia, ib] of linksRef.current) {
         const pa = byIndex.get(ia);
         const pb = byIndex.get(ib);
         if (!pa || !pb) continue;
         const depth = (pa.z + pb.z) * 0.5;
-        const alpha = (0.12 + sm.intensity * 0.28) * (0.35 + (depth + 120) / 240);
-        ctx.strokeStyle = `rgba(${lr},${lg},${lb},${alpha})`;
-        ctx.lineWidth = 0.45 + sm.intensity * 0.25;
+        const depthNorm = Math.max(0.15, (depth + 160) / 320);
+        const alpha = (0.22 + sm.intensity * 0.38) * depthNorm;
+        ctx.strokeStyle = `rgba(${lr},${lg},${lb},${Math.min(0.95, alpha)})`;
+        ctx.lineWidth = (0.65 + sm.intensity * 0.35) * sizeScale;
         ctx.beginPath();
         ctx.moveTo(pa.x, pa.y);
         ctx.lineTo(pb.x, pb.y);
         ctx.stroke();
       }
 
-      // Nodes
       for (const p of projected) {
-        const depthNorm = (p.z + 140) / 280;
-        const alpha = 0.25 + depthNorm * 0.75;
-        const glow = p.size * (1.2 + sm.intensity * 0.5);
-        ctx.fillStyle = `rgba(${lr},${lg},${lb},${alpha * 0.35})`;
+        const depthNorm = Math.max(0.2, (p.z + 160) / 320);
+        const alpha = 0.35 + depthNorm * 0.65;
+        const glowR = p.size * (2.2 + sm.intensity * 0.6);
+        ctx.fillStyle = `rgba(${lr},${lg},${lb},${alpha * 0.45})`;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, glow * 1.8, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = depthNorm > 0.72 ? pal.core : pal.node;
+        ctx.fillStyle = depthNorm > 0.68 ? pal.core : pal.node;
         ctx.globalAlpha = alpha;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, Math.max(1.1, p.size * 0.85), 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
       }
 
-      // Hot center
-      const hot = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-      hot.addColorStop(0, `rgba(255,255,255,${0.92 + sm.audio * 0.08})`);
-      hot.addColorStop(0.35, `rgba(186,249,255,${0.55 * sm.intensity})`);
+      ctx.globalCompositeOperation = "source-over";
+
+      const coreR = Math.min(w, h) * (0.11 + sm.audio * 0.05);
+      const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 3.2);
+      bloom.addColorStop(0, `rgba(255,255,255,${0.75 * sm.intensity + sm.audio * 0.25})`);
+      bloom.addColorStop(0.18, `rgba(186,249,255,${0.42 * sm.intensity})`);
+      bloom.addColorStop(0.45, `rgba(0,212,255,${0.14 * sm.intensity})`);
+      bloom.addColorStop(1, "rgba(11,15,26,0)");
+      ctx.fillStyle = bloom;
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR * 3.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      const hot = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 1.15);
+      hot.addColorStop(0, `rgba(255,255,255,${0.88 + sm.audio * 0.1})`);
+      hot.addColorStop(0.5, `rgba(125,249,255,${0.35 * sm.intensity})`);
       hot.addColorStop(1, "rgba(0,212,255,0)");
       ctx.fillStyle = hot;
       ctx.beginPath();
-      ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
+      ctx.arc(cx, cy, coreR * 1.15, 0, Math.PI * 2);
       ctx.fill();
 
       raf = requestAnimationFrame(draw);
@@ -292,21 +293,25 @@ export default function Orb() {
   const caption = STATE_CAPTION[orbState];
 
   return (
-    <div
-      ref={wrapRef}
-      className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center"
-    >
-      <div className="relative w-[clamp(280px,38vmin,560px)] aspect-square">
+    <div className="absolute inset-0 z-[5] pointer-events-none flex flex-col items-center justify-center">
+      <div
+        ref={stageRef}
+        className="relative w-[clamp(280px,38vmin,560px)] aspect-square"
+      >
         <div
-          className="absolute inset-0 rounded-full"
+          className="absolute inset-0 rounded-full pointer-events-none"
           style={{
             background:
-              "radial-gradient(circle at center, rgba(0,212,255,0.22) 0%, rgba(14,165,233,0.08) 35%, transparent 62%)",
-            filter: "blur(14px)",
-            opacity: 0.85,
+              "radial-gradient(circle at center, rgba(0,212,255,0.12) 0%, rgba(14,165,233,0.05) 40%, transparent 68%)",
+            filter: "blur(10px)",
+            opacity: 0.65,
           }}
         />
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 block h-full w-full"
+          aria-hidden
+        />
       </div>
 
       <div className="mt-2 flex flex-col items-center gap-1 text-center">
