@@ -1,6 +1,6 @@
 ﻿/**
  * JARVIS Orb — TecTimmy-style particle neural constellation.
- * Cyan/teal wireframe sphere on #0B0F1A — white-cyan core bloom, no face, no gold.
+ * Clean Fibonacci sphere lattice (latitude rings + short meridians), not dense k-NN spaghetti.
  */
 import { useEffect, useRef } from "react";
 import { useStore, type OrbState } from "../../lib/store";
@@ -9,34 +9,10 @@ const PALETTE: Record<
   OrbState,
   { node: string; core: string; speed: number; intensity: number; breathe: number }
 > = {
-  idle: {
-    node: "#5ee9ff",
-    core: "#e8fcff",
-    speed: 0.35,
-    intensity: 0.88,
-    breathe: 1,
-  },
-  listening: {
-    node: "#7df9ff",
-    core: "#ffffff",
-    speed: 0.55,
-    intensity: 1.08,
-    breathe: 1.15,
-  },
-  thinking: {
-    node: "#22d3ee",
-    core: "#ffffff",
-    speed: 1.05,
-    intensity: 1.22,
-    breathe: 1.25,
-  },
-  speaking: {
-    node: "#a5f3fc",
-    core: "#ffffff",
-    speed: 0.65,
-    intensity: 1.38,
-    breathe: 1.4,
-  },
+  idle:      { node: "#67e8f9", core: "#f0fdff", speed: 0.22, intensity: 0.9,  breathe: 1 },
+  listening: { node: "#7df9ff", core: "#ffffff", speed: 0.32, intensity: 1.05, breathe: 1.08 },
+  thinking:  { node: "#22d3ee", core: "#ffffff", speed: 0.48, intensity: 1.15, breathe: 1.12 },
+  speaking:  { node: "#a5f3fc", core: "#ffffff", speed: 0.38, intensity: 1.28, breathe: 1.18 },
 };
 
 const STATE_CAPTION: Record<OrbState, string> = {
@@ -46,8 +22,11 @@ const STATE_CAPTION: Record<OrbState, string> = {
   speaking: "speaking…",
 };
 
-const PARTICLE_COUNT = 320;
-const NEIGHBORS = 5;
+/** Even Fibonacci shell — primary visible lattice */
+const SHELL_COUNT = 198;
+/** Tight inner core nodes (bloom only, minimal links) */
+const CORE_COUNT = 24;
+const LAT_BANDS = 16;
 
 type Particle = {
   bx: number;
@@ -55,35 +34,97 @@ type Particle = {
   bz: number;
   phase: number;
   size: number;
+  layer: "shell" | "core";
 };
 
-function buildKnnLinks(parts: Particle[], k: number): [number, number][] {
+function addLink(
+  parts: Particle[],
+  r: number,
+  set: Set<string>,
+  out: [number, number][],
+  a: number,
+  b: number,
+  maxEdge: number,
+  minDot: number,
+) {
+  if (a === b) return;
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  const key = `${lo}:${hi}`;
+  if (set.has(key)) return;
+
+  const dx = parts[lo].bx - parts[hi].bx;
+  const dy = parts[lo].by - parts[hi].by;
+  const dz = parts[lo].bz - parts[hi].bz;
+  const d2 = dx * dx + dy * dy + dz * dz;
+  if (d2 > maxEdge * maxEdge) return;
+
+  const dot = (parts[lo].bx * parts[hi].bx + parts[lo].by * parts[hi].by + parts[lo].bz * parts[hi].bz) / (r * r);
+  if (dot < minDot) return;
+
+  set.add(key);
+  out.push([lo, hi]);
+}
+
+/** Geodesic-style mesh: spiral + latitude rings + one meridian hop per band. */
+function buildSphereLattice(parts: Particle[], r: number, shellEnd: number): [number, number][] {
   const set = new Set<string>();
   const links: [number, number][] = [];
-  for (let i = 0; i < parts.length; i++) {
-    const dists: { j: number; d2: number }[] = [];
-    for (let j = 0; j < parts.length; j++) {
-      if (i === j) continue;
-      const dx = parts[i].bx - parts[j].bx;
-      const dy = parts[i].by - parts[j].by;
-      const dz = parts[i].bz - parts[j].bz;
-      dists.push({ j, d2: dx * dx + dy * dy + dz * dz });
-    }
-    dists.sort((a, b) => a.d2 - b.d2);
-    for (let n = 0; n < Math.min(k, dists.length); n++) {
-      const j = dists[n].j;
-      const a = Math.min(i, j);
-      const b = Math.max(i, j);
-      const key = `${a}:${b}`;
-      if (set.has(key)) continue;
-      set.add(key);
-      links.push([a, b]);
+  const maxEdge = r * 0.17;
+  const minDot = 0.68;
+
+  for (let i = 0; i < shellEnd - 1; i++) {
+    addLink(parts, r, set, links, i, i + 1, maxEdge * 1.05, minDot);
+  }
+
+  const buckets: number[][] = Array.from({ length: LAT_BANDS }, () => []);
+  for (let i = 0; i < shellEnd; i++) {
+    const y = parts[i].by / r;
+    const b = Math.min(LAT_BANDS - 1, Math.floor(((y + 1) / 2) * LAT_BANDS));
+    buckets[b].push(i);
+  }
+
+  for (const bucket of buckets) {
+    if (bucket.length < 2) continue;
+    bucket.sort(
+      (a, b) => Math.atan2(parts[a].bz, parts[a].bx) - Math.atan2(parts[b].bz, parts[b].bx),
+    );
+    for (let k = 0; k < bucket.length - 1; k++) {
+      addLink(parts, r, set, links, bucket[k], bucket[k + 1], maxEdge, minDot);
     }
   }
+
+  for (let b = 0; b < LAT_BANDS - 1; b++) {
+    for (const i of buckets[b]) {
+      let best = -1;
+      let bestD = Infinity;
+      for (const j of buckets[b + 1]) {
+        const dx = parts[i].bx - parts[j].bx;
+        const dy = parts[i].by - parts[j].by;
+        const dz = parts[i].bz - parts[j].bz;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < bestD) {
+          bestD = d2;
+          best = j;
+        }
+      }
+      if (best >= 0) addLink(parts, r, set, links, i, best, maxEdge, minDot);
+    }
+  }
+
+  // Inner core: short ring only
+  const coreStart = shellEnd;
+  for (let i = coreStart; i < parts.length - 1; i++) {
+    addLink(parts, r * 0.12, set, links, i, i + 1, r * 0.09, 0.2);
+  }
+  if (parts.length > coreStart + 2) {
+    addLink(parts, r * 0.12, set, links, parts.length - 1, coreStart, r * 0.09, 0.2);
+  }
+
   return links;
 }
 
-function fibonacciSphere(n: number, r: number): Particle[] {
+function fibonacciSphere(n: number, r: number, layer: Particle["layer"], sizeBase: number): Particle[] {
   const golden = Math.PI * (3 - Math.sqrt(5));
   const out: Particle[] = [];
   for (let i = 0; i < n; i++) {
@@ -92,16 +133,22 @@ function fibonacciSphere(n: number, r: number): Particle[] {
     const theta = golden * i;
     const x = Math.cos(theta) * rad;
     const z = Math.sin(theta) * rad;
-    const shell = 0.88 + Math.random() * 0.14;
     out.push({
-      bx: x * r * shell,
-      by: y * r * shell,
-      bz: z * r * shell,
-      phase: Math.random() * Math.PI * 2,
-      size: 0.9 + Math.random() * 1.4,
+      bx: x * r,
+      by: y * r,
+      bz: z * r,
+      phase: (i / n) * Math.PI * 2,
+      size: sizeBase + (i % 2) * 0.25,
+      layer,
     });
   }
   return out;
+}
+
+function buildParticles(r: number): Particle[] {
+  const shell = fibonacciSphere(SHELL_COUNT, r, "shell", 1.05);
+  const core = fibonacciSphere(CORE_COUNT, r * 0.11, "core", 1.35);
+  return [...shell, ...core.map((p) => ({ ...p, layer: "core" as const }))];
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -112,10 +159,10 @@ function hexToRgb(hex: string): [number, number, number] {
 
 export default function Orb() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  /** Inner orb stage — must match canvas layout box (NOT full-screen wrap). */
   const stageRef = useRef<HTMLDivElement>(null);
   const particlesRef = useRef<Particle[] | null>(null);
   const linksRef = useRef<[number, number][]>([]);
+  const shellEndRef = useRef(SHELL_COUNT);
   const smoothRef = useRef({
     speed: PALETTE.idle.speed,
     intensity: PALETTE.idle.intensity,
@@ -135,10 +182,9 @@ export default function Orb() {
     let raf = 0;
     let w = 0;
     let h = 0;
-    let dpr = 1;
 
     const resize = () => {
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const rect = stage.getBoundingClientRect();
       w = Math.max(1, rect.width);
       h = Math.max(1, rect.height);
@@ -146,10 +192,11 @@ export default function Orb() {
       canvas.height = Math.floor(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      const radius = Math.min(w, h) * 0.38;
-      const parts = fibonacciSphere(PARTICLE_COUNT, radius);
+      const radius = Math.min(w, h) * 0.36;
+      const parts = buildParticles(radius);
       particlesRef.current = parts;
-      linksRef.current = buildKnnLinks(parts, NEIGHBORS);
+      shellEndRef.current = SHELL_COUNT;
+      linksRef.current = buildSphereLattice(parts, radius, SHELL_COUNT);
     };
 
     resize();
@@ -162,8 +209,8 @@ export default function Orb() {
       const sm = smoothRef.current;
       const k = 0.07;
       sm.speed += (pal.speed - sm.speed) * k;
-      sm.intensity += (pal.intensity * (1 + st.audioLevel * 0.55) - sm.intensity) * k;
-      sm.audio += (st.audioLevel - sm.audio) * k * 2.2;
+      sm.intensity += (pal.intensity * (1 + st.audioLevel * 0.45) - sm.intensity) * k;
+      sm.audio += (st.audioLevel - sm.audio) * k * 2;
       sm.breathe += (pal.breathe - sm.breathe) * k;
 
       const parts = particlesRef.current;
@@ -175,11 +222,10 @@ export default function Orb() {
       const cx = w / 2;
       const cy = h / 2;
       const time = now * 0.001;
-      const rotY = time * sm.speed * 0.9;
-      const rotX = time * sm.speed * 0.35 + 0.4;
-      const audioPulse = sm.audio * 0.22;
-      const breathe = 1 + Math.sin(time * 1.6 * sm.breathe) * 0.04 + audioPulse;
-      const sizeScale = Math.max(1, Math.min(w, h) / 280);
+      const rotY = time * sm.speed;
+      const rotX = time * sm.speed * 0.28 + 0.35;
+      const breathe = 1 + Math.sin(time * 1.2) * 0.018 + sm.audio * 0.12;
+      const sizeScale = Math.max(1, Math.min(w, h) / 300);
 
       ctx.clearRect(0, 0, w, h);
 
@@ -188,16 +234,15 @@ export default function Orb() {
       const sinX = Math.sin(rotX);
       const cosX = Math.cos(rotX);
 
-      const projected: { x: number; y: number; z: number; i: number; size: number }[] = [];
+      type Proj = { x: number; y: number; z: number; i: number; size: number; layer: Particle["layer"] };
+      const projected: Proj[] = [];
 
       for (let i = 0; i < parts.length; i++) {
         const p = parts[i];
-        const wobble =
-          Math.sin(time * 2.2 + p.phase) * 2.5 * sm.intensity +
-          Math.cos(time * 1.7 + p.phase * 1.3) * 1.8;
-        let x = p.bx * breathe + wobble * 0.015 * p.bx;
-        let y = p.by * breathe + wobble * 0.015 * p.by;
-        let z = p.bz * breathe + wobble * 0.015 * p.bz;
+        const wobble = Math.sin(time * 1.6 + p.phase) * (p.layer === "core" ? 0.4 : 1.2);
+        let x = p.bx * breathe + (p.bx / (Math.hypot(p.bx, p.by, p.bz) || 1)) * wobble * 0.008;
+        let y = p.by * breathe + (p.by / (Math.hypot(p.bx, p.by, p.bz) || 1)) * wobble * 0.008;
+        let z = p.bz * breathe + (p.bz / (Math.hypot(p.bx, p.by, p.bz) || 1)) * wobble * 0.008;
 
         const x1 = x * cosY - z * sinY;
         const z1 = x * sinY + z * cosY;
@@ -208,76 +253,86 @@ export default function Orb() {
         y = y2;
         z = z2;
 
-        const perspective = 420 / (420 - z);
+        const perspective = 440 / (440 - z);
         projected.push({
           x: cx + x * perspective,
           y: cy + y * perspective,
           z,
           i,
-          size: p.size * perspective * sizeScale * (0.95 + sm.audio * 0.4),
+          size: p.size * perspective * sizeScale * (p.layer === "core" ? 1.15 : 1),
+          layer: p.layer,
         });
       }
 
-      projected.sort((a, b) => a.z - b.z);
-
       const [lr, lg, lb] = hexToRgb(pal.node);
-      const byIndex = new Map<number, (typeof projected)[0]>();
+      const byIndex = new Map<number, Proj>();
       for (const p of projected) byIndex.set(p.i, p);
 
-      ctx.globalCompositeOperation = "lighter";
+      const drawLinks = (back: boolean) => {
+        ctx.lineCap = "round";
+        for (const [ia, ib] of linksRef.current) {
+          const pa = byIndex.get(ia);
+          const pb = byIndex.get(ib);
+          if (!pa || !pb) continue;
+          const midZ = (pa.z + pb.z) * 0.5;
+          const isBack = midZ < 0;
+          if (isBack !== back) continue;
 
-      ctx.lineCap = "round";
-      for (const [ia, ib] of linksRef.current) {
-        const pa = byIndex.get(ia);
-        const pb = byIndex.get(ib);
-        if (!pa || !pb) continue;
-        const depth = (pa.z + pb.z) * 0.5;
-        const depthNorm = Math.max(0.15, (depth + 160) / 320);
-        const alpha = (0.22 + sm.intensity * 0.38) * depthNorm;
-        ctx.strokeStyle = `rgba(${lr},${lg},${lb},${Math.min(0.95, alpha)})`;
-        ctx.lineWidth = (0.65 + sm.intensity * 0.35) * sizeScale;
-        ctx.beginPath();
-        ctx.moveTo(pa.x, pa.y);
-        ctx.lineTo(pb.x, pb.y);
-        ctx.stroke();
-      }
+          const depthNorm = Math.max(0.08, Math.min(1, (midZ + 140) / 260));
+          const alpha = (back ? 0.06 : 0.14) * depthNorm * sm.intensity;
+          ctx.strokeStyle = `rgba(${lr},${lg},${lb},${alpha})`;
+          ctx.lineWidth = (back ? 0.28 : 0.42) * sizeScale;
+          ctx.beginPath();
+          ctx.moveTo(pa.x, pa.y);
+          ctx.lineTo(pb.x, pb.y);
+          ctx.stroke();
+        }
+      };
 
-      for (const p of projected) {
-        const depthNorm = Math.max(0.2, (p.z + 160) / 320);
-        const alpha = 0.35 + depthNorm * 0.65;
-        const glowR = p.size * (2.2 + sm.intensity * 0.6);
-        ctx.fillStyle = `rgba(${lr},${lg},${lb},${alpha * 0.45})`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = depthNorm > 0.68 ? pal.core : pal.node;
-        ctx.globalAlpha = alpha;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, Math.max(1.1, p.size * 0.85), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
+      const drawNodes = (back: boolean) => {
+        for (const p of projected) {
+          const isBack = p.z < 0;
+          if (isBack !== back) continue;
+          const depthNorm = Math.max(0.1, Math.min(1, (p.z + 140) / 260));
+          const alpha = (back ? 0.18 : 0.55) * depthNorm;
+          const glowR = p.size * (p.layer === "core" ? 2.8 : 2.1);
+          ctx.fillStyle = `rgba(${lr},${lg},${lb},${alpha * 0.35})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = p.layer === "core" || depthNorm > 0.62 ? pal.core : pal.node;
+          ctx.globalAlpha = alpha;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, Math.max(0.9, p.size * 0.75), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      };
 
-      ctx.globalCompositeOperation = "source-over";
-
-      const coreR = Math.min(w, h) * (0.11 + sm.audio * 0.05);
-      const bloom = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 3.2);
-      bloom.addColorStop(0, `rgba(255,255,255,${0.75 * sm.intensity + sm.audio * 0.25})`);
-      bloom.addColorStop(0.18, `rgba(186,249,255,${0.42 * sm.intensity})`);
-      bloom.addColorStop(0.45, `rgba(0,212,255,${0.14 * sm.intensity})`);
-      bloom.addColorStop(1, "rgba(11,15,26,0)");
-      ctx.fillStyle = bloom;
+      const coreR = Math.min(w, h) * (0.1 + sm.audio * 0.04);
+      const ambient = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 3.5);
+      ambient.addColorStop(0, `rgba(255,255,255,${0.32 * sm.intensity + sm.audio * 0.15})`);
+      ambient.addColorStop(0.22, `rgba(186,249,255,${0.2 * sm.intensity})`);
+      ambient.addColorStop(0.55, `rgba(0,212,255,${0.06 * sm.intensity})`);
+      ambient.addColorStop(1, "rgba(11,15,26,0)");
+      ctx.fillStyle = ambient;
       ctx.beginPath();
-      ctx.arc(cx, cy, coreR * 3.2, 0, Math.PI * 2);
+      ctx.arc(cx, cy, coreR * 3.5, 0, Math.PI * 2);
       ctx.fill();
 
-      const hot = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 1.15);
-      hot.addColorStop(0, `rgba(255,255,255,${0.88 + sm.audio * 0.1})`);
-      hot.addColorStop(0.5, `rgba(125,249,255,${0.35 * sm.intensity})`);
-      hot.addColorStop(1, "rgba(0,212,255,0)");
+      drawLinks(true);
+      drawNodes(true);
+      drawLinks(false);
+      drawNodes(false);
+
+      const hot = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 1.25);
+      hot.addColorStop(0, `rgba(255,255,255,${0.92 + sm.audio * 0.06})`);
+      hot.addColorStop(0.35, `rgba(186,249,255,${0.45 * sm.intensity})`);
+      hot.addColorStop(0.75, `rgba(0,212,255,${0.08 * sm.intensity})`);
+      hot.addColorStop(1, "rgba(11,15,26,0)");
       ctx.fillStyle = hot;
       ctx.beginPath();
-      ctx.arc(cx, cy, coreR * 1.15, 0, Math.PI * 2);
+      ctx.arc(cx, cy, coreR * 1.25, 0, Math.PI * 2);
       ctx.fill();
 
       raf = requestAnimationFrame(draw);
@@ -294,36 +349,29 @@ export default function Orb() {
 
   return (
     <div className="absolute inset-0 z-[5] pointer-events-none flex flex-col items-center justify-center">
-      <div
-        ref={stageRef}
-        className="relative w-[clamp(280px,38vmin,560px)] aspect-square"
-      >
+      <div ref={stageRef} className="relative w-[clamp(280px,38vmin,560px)] aspect-square">
         <div
           className="absolute inset-0 rounded-full pointer-events-none"
           style={{
             background:
-              "radial-gradient(circle at center, rgba(0,212,255,0.12) 0%, rgba(14,165,233,0.05) 40%, transparent 68%)",
-            filter: "blur(10px)",
-            opacity: 0.65,
+              "radial-gradient(circle at center, rgba(0,212,255,0.08) 0%, rgba(14,165,233,0.03) 42%, transparent 70%)",
+            filter: "blur(12px)",
+            opacity: 0.55,
           }}
         />
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 block h-full w-full"
-          aria-hidden
-        />
+        <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" aria-hidden />
       </div>
 
-      <div className="mt-2 flex flex-col items-center gap-1 text-center">
+      <div className="mt-2 flex flex-col items-center gap-0.5 text-center">
         {caption ? (
           <span
-            className="font-sans text-sm tracking-wide text-[#5ee9ff]"
-            style={{ textShadow: "0 0 12px rgba(0,212,255,0.45)" }}
+            className="font-sans text-sm tracking-wide text-[#5ee9ff]/90"
+            style={{ textShadow: "0 0 10px rgba(0,212,255,0.35)" }}
           >
             {caption}
           </span>
         ) : null}
-        <span className="font-mono text-[10px] tracking-[0.35em] text-[#64748b] uppercase">
+        <span className="font-mono text-[9px] tracking-[0.4em] text-[#475569]/90 uppercase">
           JARVIS
         </span>
       </div>
