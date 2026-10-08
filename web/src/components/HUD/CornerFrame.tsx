@@ -42,8 +42,8 @@ function Corner({ position }: { position: "tl" | "tr" | "bl" | "br" }) {
     <div
       className={`absolute w-10 h-10 ${map[position]}`}
       style={{
-        borderColor: "rgba(186,230,253,0.35)",
-        boxShadow: "0 0 18px -4px rgba(125,211,252,0.35)",
+        borderColor: "rgba(212,175,55,0.38)",
+        boxShadow: "0 0 18px -4px rgba(255,210,122,0.28)",
       }}
     />
   );

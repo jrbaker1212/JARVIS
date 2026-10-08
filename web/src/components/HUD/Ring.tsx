@@ -1,6 +1,8 @@
 /**
  * Circular gauge ring — SVG. Used for CPU/RAM/Disk diagnostic dial.
  */
+import { HUD_PALETTE, ringAccentColor } from "../../lib/hudTheme";
+
 interface Props {
   value: number;            // 0..100
   label: string;
@@ -9,20 +11,20 @@ interface Props {
   color?: string;
 }
 
-export default function Ring({ value, label, sub, size = 110, color = "#22d3ee" }: Props) {
+export default function Ring({ value, label, sub, size = 110, color = HUD_PALETTE.goldBase }: Props) {
   const v = Math.max(0, Math.min(100, value));
   const r = size / 2 - 8;
   const cx = size / 2;
   const cy = size / 2;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - v / 100);
-  const accentColor = v > 85 ? "#ef4444" : v > 65 ? "#f59e0b" : color;
+  const accentColor = ringAccentColor(v, color);
 
   return (
     <div className="relative inline-flex flex-col items-center">
       <svg width={size} height={size} className="-rotate-90">
         {/* Background ring */}
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(34,211,238,0.12)" strokeWidth="3" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(212,175,55,0.14)" strokeWidth="3" />
         {/* Tick marks */}
         {Array.from({ length: 40 }).map((_, i) => {
           const ang = (i / 40) * 2 * Math.PI;
@@ -30,7 +32,7 @@ export default function Ring({ value, label, sub, size = 110, color = "#22d3ee" 
           const y1 = cy + (r + 6) * Math.sin(ang);
           const x2 = cx + (r + 2) * Math.cos(ang);
           const y2 = cy + (r + 2) * Math.sin(ang);
-          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(34,211,238,0.3)" strokeWidth="1" />;
+          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(212,175,55,0.32)" strokeWidth="1" />;
         })}
         {/* Value arc */}
         <circle

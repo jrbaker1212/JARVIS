@@ -5,10 +5,11 @@
  */
 import * as THREE from "three";
 import type { OrbState } from "../../lib/store";
+import { HUD_GOLD_THREE } from "../../lib/hudTheme";
 
-const CYAN = 0x00e8ff;
-const CYAN_THINK = 0x7df9ff;
-const CYAN_SPEAK = 0x5ee9ff;
+const GOLD = HUD_GOLD_THREE.base;
+const GOLD_THINK = HUD_GOLD_THREE.think;
+const GOLD_SPEAK = HUD_GOLD_THREE.speak;
 
 export interface JarvisOrbHandle {
   destroy(): void;
@@ -53,7 +54,7 @@ export function createJarvisOrb(
   geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
 
   const mat = new THREE.PointsMaterial({
-    color: CYAN,
+    color: GOLD,
     size: 0.42,
     transparent: true,
     opacity: 0.72,
@@ -72,7 +73,7 @@ export function createJarvisOrb(
   lineGeo.setDrawRange(0, 0);
 
   const lineMat = new THREE.LineBasicMaterial({
-    color: CYAN,
+    color: GOLD,
     transparent: true,
     opacity: 0,
     blending: THREE.AdditiveBlending,
@@ -377,14 +378,14 @@ export function createJarvisOrb(
     mat.size = currentSize + bass * 0.06;
 
     if (state === "thinking") {
-      mat.color.lerp(new THREE.Color(CYAN_THINK), 0.015);
-      lineMat.color.lerp(new THREE.Color(CYAN_THINK), 0.015);
+      mat.color.lerp(new THREE.Color(GOLD_THINK), 0.015);
+      lineMat.color.lerp(new THREE.Color(GOLD_THINK), 0.015);
     } else if (state === "speaking") {
-      mat.color.lerp(new THREE.Color(CYAN_SPEAK), 0.015);
-      lineMat.color.lerp(new THREE.Color(CYAN_SPEAK), 0.015);
+      mat.color.lerp(new THREE.Color(GOLD_SPEAK), 0.015);
+      lineMat.color.lerp(new THREE.Color(GOLD_SPEAK), 0.015);
     } else {
-      mat.color.lerp(new THREE.Color(CYAN), 0.015);
-      lineMat.color.lerp(new THREE.Color(CYAN), 0.015);
+      mat.color.lerp(new THREE.Color(GOLD), 0.015);
+      lineMat.color.lerp(new THREE.Color(GOLD), 0.015);
     }
     camera.position.x = Math.sin(t * 0.02) * 5;
     camera.position.y = Math.cos(t * 0.03) * 3;

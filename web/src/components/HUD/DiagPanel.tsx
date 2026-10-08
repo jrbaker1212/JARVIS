@@ -35,7 +35,7 @@ export default function DiagPanel() {
 
   return (
     <div className="holo-panel p-2 space-y-2">
-      <div className="flex items-center justify-between px-1 pb-1 border-b border-jarvis-cyan/20">
+      <div className="flex items-center justify-between px-1 pb-1 border-b border-jarvis-gold/25">
         <div className="text-display text-[10px] tracking-[0.3em] text-jarvis-cyan/80">DIAGNOSTICS</div>
         <ArcReactor />
       </div>
