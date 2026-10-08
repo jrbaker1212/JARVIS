@@ -41,13 +41,16 @@ export default function ArcReactor() {
         }}
       >
         <span
-          className="font-techno font-bold tracking-[0.12em] text-[9px] leading-none"
+          className="font-techno font-bold leading-none select-none"
           style={{
-            color: HUD_PALETTE.goldHighlight,
-            textShadow: "0 0 8px rgba(212,175,55,0.7), 0 0 14px rgba(255,210,122,0.35)",
+            fontSize: "1.375rem",
+            color: HUD_PALETTE.goldBase,
+            textShadow:
+              "0 0 10px rgba(255,210,122,0.7), 0 0 20px rgba(212,175,55,0.45), 0 1px 0 #FFD27A",
           }}
+          aria-label="Nexy core"
         >
-          CORE
+          N
         </span>
       </div>
       {Array.from({ length: 12 }).map((_, i) => (
