@@ -1612,3 +1612,29 @@ async def img2img_endpoint(
     except Exception as e:
         _img_log.exception("img2img failed")
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+# memlock 2026-10-13: ConvAI client tools (memory_write / memory_read / memory_list) land here.
+@router.post("/nexey-memory/write")
+async def nexey_memory_write(body: dict):
+    from ..utils import memory_guard as G
+    try:
+        return G.append_entry(str(body.get("content") or ""), filename=body.get("filename") or None,
+                              kind=str(body.get("kind") or "note"))
+    except G.MemoryGuardError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+
+
+@router.get("/nexey-memory/read")
+async def nexey_memory_read(filename: str | None = None):
+    from ..utils import memory_guard as G
+    try:
+        return {"ok": True, "text": G.read_file(filename)}
+    except G.MemoryGuardError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+
+
+@router.get("/nexey-memory/list")
+async def nexey_memory_list():
+    from ..utils import memory_guard as G
+    return {"ok": True, "files": G.list_files()}

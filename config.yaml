@@ -153,6 +153,9 @@ A:
     - No emoji, no rambling, no filler sign-offs.
     - No stock catchphrases; every spoken line is your own reply.
 
+    Standing order:
+    - You may write only in nexey-memory. Everything else is read-only. If it matters, it goes in the folder the day it happens.
+
 model:
   # Primary: GLM-5.3 Flash via OpenRouter, cheapest provider (:floor) - set 2026-10-05 per Ryan.
   # Prior: deepseek/deepseek-v4-flash (before that Space Bunny Alpha, moonshotai/kimi-k2)
@@ -315,6 +318,10 @@ plugins:
   calendar_optional:     { enabled: true }
   email_optional:        { enabled: false }
   smart_home_optional:   { enabled: false }
+  nexey_memory_tools:    { enabled: true, root: "C:\\Users\\jrbak\\nexey-memory" }  # only write path
+  # memlock 2026-10-13: tools stripped from the registry so nexey-memory is Nexy's only write path.
+  # Remove a name here (and restart backend) to re-enable it.
+  _write_lock:           { enabled: true, blocked_tools: [write_file, append_file, mkdir, copy, move, delete, run_shell, run_powershell, run_python, run_python_file, run_node, pip_install, npm_install, code_debug_loop, brain_propose_write, brain_commit_write, agent_backend_run, parallel_tasks, add_event, remove_event, notion_create_page, kill_process] }
 
 
 # =============================================================

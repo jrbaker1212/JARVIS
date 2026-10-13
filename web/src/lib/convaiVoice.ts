@@ -257,7 +257,26 @@ async function openConvaiSession(
     textOnly: false;
     inputDeviceId: string;
     outputDeviceId?: string;
+    clientTools?: Record<string, (p: any) => Promise<string>>;
   } = { textOnly: false, inputDeviceId: xbox.micId };
+  // memlock 2026-10-13: Nexy's only write path (nexey-memory) as ConvAI client tools.
+  sessionOpts.clientTools = {
+    memory_write: async (p: any) => {
+      const r = await fetch("/api/nexey-memory/write", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: p?.content, kind: p?.kind, filename: p?.filename }) });
+      const j = await r.json().catch(() => ({}));
+      return r.ok ? `saved to nexey-memory/${j.file}` : `refused: ${j.error || r.status}`;
+    },
+    memory_read: async (p: any) => {
+      const q = p?.filename ? `?filename=${encodeURIComponent(p.filename)}` : "";
+      const j = await (await fetch(`/api/nexey-memory/read${q}`)).json().catch(() => ({}));
+      return j.ok ? (j.text || "(empty)") : `refused: ${j.error}`;
+    },
+    memory_list: async () => {
+      const j = await (await fetch("/api/nexey-memory/list")).json().catch(() => ({}));
+      return (j.files || []).map((f: any) => f.file).join("\n") || "(no entries yet)";
+    },
+  };
   if (xbox.sinkId && xbox.sinkId !== "default" && xbox.sinkId !== "communications") {
     sessionOpts.outputDeviceId = xbox.sinkId;
   }

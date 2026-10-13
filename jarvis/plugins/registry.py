@@ -73,7 +73,7 @@ class PluginRegistry:
         prefix = pkg.__name__ + "."
         for mod_info in pkgutil.iter_modules(pkg.__path__):
             modname = mod_info.name
-            if modname in {"__init__", "base", "registry"}:
+            if modname in {"__init__", "base", "registry"} or modname.startswith("_"):
                 continue
             toggle = self.cfg.plugins.get(modname)
             if toggle is not None and not toggle.enabled:
@@ -92,3 +92,9 @@ class PluginRegistry:
                 log.info("plugin '%s' loaded", modname)
             except Exception as e:  # noqa: BLE001
                 log.error("plugin '%s' register() failed: %s", modname, e)
+        # memlock: Nexy's only write path is nexey-memory (memory_write). Strip gated tools.
+        lock = self.cfg.plugins.get("_write_lock")
+        if lock is not None and lock.enabled:
+            for name in list(getattr(lock, "blocked_tools", None) or []):
+                if self._tools.pop(name, None) is not None:
+                    log.info("memlock: tool '%s' gated (not registered)", name)
