@@ -309,9 +309,8 @@ export default function App() {
     if (useStore.getState().voicePipeline === "convai") return;
     if (!booted || greetedRef.current) return;
     greetedRef.current = true;
-    const h = new Date().getHours();
-    const part = h < 12 ? "morning" : h < 18 ? "afternoon" : "evening";
-    const text = `Good ${part}, sir. All systems are online and at your service.`;
+    const text = ""; // canned greeting removed; Nexy speaks only model replies
+    if (!text) return;
     try {
       if (sessionStorage.getItem(GREETING_SESSION_KEY) === "1") return;
       sessionStorage.setItem(GREETING_SESSION_KEY, "1");

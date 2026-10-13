@@ -90,7 +90,7 @@ def ensure_convai_agent(cfg) -> str:
         "name": "Nexy Dix01 (personal)",
         "conversation_config": {
             "agent": {
-                "first_message": "Nexy here, Ryan. I'm listening.",
+                "first_message": "",
                 "language": "en",
                 "prompt": {"prompt": NEXY_PROMPT},
             },
