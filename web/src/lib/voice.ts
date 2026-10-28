@@ -1018,8 +1018,8 @@ export class JarvisMic {
       useStore.getState().setMicMode("speaking");
       useStore.getState().setMicStatus(
         useStore.getState().bargeIn
-          ? "JARVIS speaking Â· say â€œcancelâ€ to stop"
-          : "JARVIS speaking Â· mic muted",
+          ? "Nexy speaking Â· say â€œcancelâ€ to stop"
+          : "Nexy speaking Â· mic muted",
       );
     }
   }
@@ -1392,8 +1392,8 @@ export class JarvisMic {
         if (this._ttsActive) {
           useStore.getState().setMicStatus(
             useStore.getState().bargeIn
-              ? "JARVIS speaking Â· say â€œcancelâ€ to stop"
-              : "JARVIS speaking Â· mic muted",
+              ? "Nexy speaking Â· say â€œcancelâ€ to stop"
+              : "Nexy speaking Â· mic muted",
           );
         } else {
           useStore.getState().setMicStatus("listening Â· say â€œHey Nexyâ€");
