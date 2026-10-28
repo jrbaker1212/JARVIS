@@ -75,7 +75,7 @@ export default function Widget() {
       className="fixed inset-0 flex flex-col text-jarvis-ice"
       style={{
         background:
-          "radial-gradient(120% 80% at 50% -10%, rgba(125,211,252,0.22), transparent 55%), " +
+          "radial-gradient(120% 80% at 50% -10%, rgba(47,140,255,0.22), transparent 55%), " +
           "radial-gradient(120% 80% at 50% 110%, rgba(167,139,250,0.16), transparent 55%), " +
           "linear-gradient(180deg, #04080f 0%, #05101e 100%)",
       }}
@@ -131,7 +131,7 @@ export default function Widget() {
           style={{
             boxShadow:
               "0 1px 0 0 rgba(255,255,255,0.06) inset, " +
-              "0 0 32px -8px rgba(125,211,252,0.18), " +
+              "0 0 32px -8px rgba(47,140,255,0.18), " +
               "0 18px 48px -20px rgba(8,16,30,0.8)",
           }}
         >
@@ -196,8 +196,8 @@ export default function Widget() {
 function MiniOrb() {
   const orbState = useStore((s) => s.orbState);
   const audio = useStore((s) => s.audioLevel);
-  const cyan = orbState === "speaking" ? "#7df9ff" : "#00e5ff";
-  const teal = "#22d3ee";
+  const cyan = orbState === "speaking" ? "#6CC6FF" : "#2F8CFF";
+  const teal = "#6CC6FF";
   const scale = 1 + Math.min(0.3, audio * 1.2);
   return (
     <div className="w-14 h-14 shrink-0 relative">

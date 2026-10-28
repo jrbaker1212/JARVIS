@@ -500,7 +500,7 @@ export default function App() {
       {/* ── Per-kind media hubs. Each only renders when has items. ── */}
       {has(["image"]) && visHubImages && (
         <Floating id="hub.images" defaultBox={D.images} minW={360} minH={260} z={22} label="Image gen">
-          <MediaHub kinds={["image"]} title="IMAGE GEN" accent="#7df9ff" />
+          <MediaHub kinds={["image"]} title="IMAGE GEN" accent="#6CC6FF" />
         </Floating>
       )}
       {has(["video", "videos"]) && visHubVideos && (
@@ -510,7 +510,7 @@ export default function App() {
       )}
       {has(["search"]) && visHubWebsearch && (
         <Floating id="hub.websearch" defaultBox={D.websearch} minW={340} minH={260} z={22} label="Web search">
-          <MediaHub kinds={["search"]} title="WEB SEARCH" accent="#00e5ff" />
+          <MediaHub kinds={["search"]} title="WEB SEARCH" accent="#2F8CFF" />
         </Floating>
       )}
       {has(["news"]) && visHubNews && (
@@ -520,7 +520,7 @@ export default function App() {
       )}
       {has(["images"]) && visHubImagesearch && (
         <Floating id="hub.imagesearch" defaultBox={D.imagesearch} minW={360} minH={280} z={22} label="Image search">
-          <MediaHub kinds={["images"]} title="IMAGE SEARCH" accent="#00e5ff" />
+          <MediaHub kinds={["images"]} title="IMAGE SEARCH" accent="#2F8CFF" />
         </Floating>
       )}
       {has(["page", "pdf"]) && visHubPages && (

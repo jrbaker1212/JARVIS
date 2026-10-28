@@ -231,7 +231,7 @@ export default function CommandBar() {
         <button
           onClick={submit}
           disabled={(!value.trim() && pending.length === 0) || !connected}
-          className="px-4 h-9 rounded-xl border border-jarvis-cyan/55 text-jarvis-ice bg-gradient-to-b from-jarvis-cyan/15 to-jarvis-cyan/5 hover:from-jarvis-cyan/25 hover:to-jarvis-cyan/10 hover:border-jarvis-cyan text-mono text-[11px] uppercase tracking-[0.25em] disabled:opacity-30 transition-all shadow-[0_0_24px_-8px_rgba(125,211,252,0.5)] shrink-0"
+          className="px-4 h-9 rounded-xl border border-jarvis-cyan/55 text-jarvis-ice bg-gradient-to-b from-jarvis-cyan/15 to-jarvis-cyan/5 hover:from-jarvis-cyan/25 hover:to-jarvis-cyan/10 hover:border-jarvis-cyan text-mono text-[11px] uppercase tracking-[0.25em] disabled:opacity-30 transition-all shadow-[0_0_24px_-8px_rgba(47,140,255,0.5)] shrink-0"
         >
           send
         </button>

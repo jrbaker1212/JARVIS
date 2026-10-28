@@ -11,8 +11,8 @@ import { useMemo } from "react";
 import { useStore, type SwarmSubtask } from "../../lib/store";
 
 const STATUS_COLOR: Record<SwarmSubtask["status"], string> = {
-  pending: "rgba(186,230,253,0.45)",
-  running: "rgba(125,211,252,0.95)",
+  pending: "rgba(108,198,255,0.45)",
+  running: "rgba(47,140,255,0.95)",
   ok:      "rgba(134,239,172,0.95)",
   fail:    "rgba(252,165,165,0.95)",
 };
@@ -59,10 +59,10 @@ export default function SwarmPanel() {
                 style={{
                   background: "rgba(14,24,42,0.40)",
                   borderColor: run.active
-                    ? "rgba(125,211,252,0.40)"
-                    : "rgba(186,230,253,0.15)",
+                    ? "rgba(47,140,255,0.40)"
+                    : "rgba(108,198,255,0.15)",
                   boxShadow: run.active
-                    ? "0 0 24px -6px rgba(125,211,252,0.55), 0 4px 14px -6px rgba(0,0,0,0.5)"
+                    ? "0 0 24px -6px rgba(47,140,255,0.55), 0 4px 14px -6px rgba(0,0,0,0.5)"
                     : "0 4px 14px -6px rgba(0,0,0,0.5)",
                 }}
               >
@@ -93,9 +93,9 @@ export default function SwarmPanel() {
                     className="absolute inset-y-0 left-0"
                     style={{
                       background: failed > 0
-                        ? "linear-gradient(90deg, #7dd3fc, #fca5a5)"
-                        : "linear-gradient(90deg, #7dd3fc, #a5f3fc)",
-                      boxShadow: "0 0 12px rgba(125,211,252,0.7)",
+                        ? "linear-gradient(90deg, #6CC6FF, #fca5a5)"
+                        : "linear-gradient(90deg, #6CC6FF, #6CC6FF)",
+                      boxShadow: "0 0 12px rgba(47,140,255,0.7)",
                     }}
                     animate={{ width: `${pct}%` }}
                     transition={{ duration: 0.4, ease: "easeOut" }}

@@ -45,8 +45,8 @@ export default function StatusBar() {
               className="absolute inset-y-0 left-0 transition-all duration-75 rounded-full"
               style={{
                 width: `${Math.min(100, audio * 250)}%`,
-                background: "linear-gradient(90deg, rgba(125,249,255,0.9), rgba(34,211,238,0.95))",
-                boxShadow: "0 0 10px rgba(0,212,255,0.7), 0 0 20px rgba(125,249,255,0.35)",
+                background: "linear-gradient(90deg, rgba(108,198,255,0.9), rgba(108,198,255,0.95))",
+                boxShadow: "0 0 10px rgba(47,140,255,0.7), 0 0 20px rgba(108,198,255,0.35)",
               }}
             />
           </div>

@@ -152,8 +152,8 @@ function EnergyCharge({ phase }: { phase: Phase }) {
           style={{
             left: "50%", top: "50%",
             width: 4, height: 4, borderRadius: 9999,
-            background: "rgba(186,230,253,0.95)",
-            boxShadow: "0 0 14px 3px rgba(125,211,252,0.95), 0 0 4px 1px rgba(186,230,253,1)",
+            background: "rgba(108,198,255,0.95)",
+            boxShadow: "0 0 14px 3px rgba(47,140,255,0.95), 0 0 4px 1px rgba(108,198,255,1)",
           }}
           initial={{ x: m.from.x, y: m.from.y, opacity: 0, scale: 0.6 }}
           animate={{
@@ -184,7 +184,7 @@ function ChromaticBloom({ phase }: { phase: Phase }) {
         style={{
           width: 8, height: 8, borderRadius: 9999,
           background: "rgba(255,255,255,0.98)",
-          boxShadow: "0 0 30px 8px rgba(125,211,252,0.95), 0 0 8px 2px #ffffff",
+          boxShadow: "0 0 30px 8px rgba(47,140,255,0.95), 0 0 8px 2px #ffffff",
         }}
         initial={{ scale: 0, opacity: 0 }}
         animate={
@@ -208,7 +208,7 @@ function ChromaticBloom({ phase }: { phase: Phase }) {
         className="absolute inset-x-0 mx-auto"
         style={{
           background:
-            "radial-gradient(ellipse at center, rgba(125,211,252,0.55) 0%, rgba(125,211,252,0.15) 50%, rgba(14,24,42,0) 80%)",
+            "radial-gradient(ellipse at center, rgba(47,140,255,0.55) 0%, rgba(47,140,255,0.15) 50%, rgba(14,24,42,0) 80%)",
           mixBlendMode: "screen",
         }}
         initial={{ height: 2, top: "50%", y: "-50%", opacity: 0 }}
@@ -230,7 +230,7 @@ function ChromaticBloom({ phase }: { phase: Phase }) {
         className="absolute inset-0 rounded-xl"
         style={{
           boxShadow:
-            "0 0 0 1px rgba(186,230,253,0.65) inset, 0 0 56px -4px rgba(125,211,252,0.75), 0 0 10px 0 rgba(186,230,253,0.55) inset",
+            "0 0 0 1px rgba(108,198,255,0.65) inset, 0 0 56px -4px rgba(47,140,255,0.75), 0 0 10px 0 rgba(108,198,255,0.55) inset",
         }}
         initial={{ opacity: 0 }}
         animate={phase === "settle" ? { opacity: [0, 1, 0] } : { opacity: 0 }}
@@ -250,7 +250,7 @@ function RGBHairline({
   const color =
     channel === "r" ? "rgba(255,90,90,0.95)" :
     channel === "g" ? "rgba(120,255,180,0.95)" :
-                      "rgba(125,211,252,0.95)";
+                      "rgba(47,140,255,0.95)";
   const visible = phase === "bloom" || phase === "settle";
   return (
     <motion.div
@@ -306,7 +306,7 @@ function HexField({ phase, subtle = false }: { phase: Phase; subtle?: boolean })
           <path
             d="M11 0 L22 6.35 V19.05 L11 25.4 L0 19.05 V6.35 Z"
             fill="none"
-            stroke="rgba(125,211,252,0.85)"
+            stroke="rgba(47,140,255,0.85)"
             strokeWidth={subtle ? 0.6 : 0.9}
           />
         </pattern>
@@ -387,8 +387,8 @@ function Bracket({
           left: isLeft ? 0 : "auto",
           right: !isLeft ? 0 : "auto",
           height: short,
-          background: "linear-gradient(90deg, rgba(186,230,253,1), rgba(125,211,252,0.65))",
-          boxShadow: "0 0 10px 1px rgba(125,211,252,0.85)",
+          background: "linear-gradient(90deg, rgba(108,198,255,1), rgba(47,140,255,0.65))",
+          boxShadow: "0 0 10px 1px rgba(47,140,255,0.85)",
         }}
         initial={{ width: long }}
         animate={{ width: wide }}
@@ -402,8 +402,8 @@ function Bracket({
           left: isLeft ? 0 : "auto",
           right: !isLeft ? 0 : "auto",
           width: short,
-          background: "linear-gradient(180deg, rgba(186,230,253,1), rgba(125,211,252,0.65))",
-          boxShadow: "0 0 10px 1px rgba(125,211,252,0.85)",
+          background: "linear-gradient(180deg, rgba(108,198,255,1), rgba(47,140,255,0.65))",
+          boxShadow: "0 0 10px 1px rgba(47,140,255,0.85)",
         }}
         initial={{ height: long }}
         animate={{ height: wide }}
@@ -438,14 +438,14 @@ function ReticleRing({ phase }: { phase: Phase }) {
       transition={{ duration: 0.55, ease: EASE }}
     >
       <circle cx="50" cy="50" r="34" fill="none"
-              stroke="rgba(186,230,253,0.9)" strokeWidth="0.8"
+              stroke="rgba(108,198,255,0.9)" strokeWidth="0.8"
               strokeDasharray="4 6" />
       <circle cx="50" cy="50" r="22" fill="none"
-              stroke="rgba(125,211,252,0.95)" strokeWidth="0.6" />
-      <line x1="50" y1="6"  x2="50" y2="18" stroke="rgba(186,230,253,1)" strokeWidth="1" />
-      <line x1="50" y1="82" x2="50" y2="94" stroke="rgba(186,230,253,1)" strokeWidth="1" />
-      <line x1="6"  y1="50" x2="18" y2="50" stroke="rgba(186,230,253,1)" strokeWidth="1" />
-      <line x1="82" y1="50" x2="94" y2="50" stroke="rgba(186,230,253,1)" strokeWidth="1" />
+              stroke="rgba(47,140,255,0.95)" strokeWidth="0.6" />
+      <line x1="50" y1="6"  x2="50" y2="18" stroke="rgba(108,198,255,1)" strokeWidth="1" />
+      <line x1="50" y1="82" x2="50" y2="94" stroke="rgba(108,198,255,1)" strokeWidth="1" />
+      <line x1="6"  y1="50" x2="18" y2="50" stroke="rgba(108,198,255,1)" strokeWidth="1" />
+      <line x1="82" y1="50" x2="94" y2="50" stroke="rgba(108,198,255,1)" strokeWidth="1" />
     </motion.svg>
   );
 }
@@ -479,8 +479,8 @@ function Datastream({ phase }: { phase: Phase }) {
       <motion.div
         className="absolute inset-x-0 h-px"
         style={{
-          background: "linear-gradient(90deg, transparent, rgba(186,230,253,0.95), transparent)",
-          boxShadow: "0 0 12px rgba(125,211,252,0.85)",
+          background: "linear-gradient(90deg, transparent, rgba(108,198,255,0.95), transparent)",
+          boxShadow: "0 0 12px rgba(47,140,255,0.85)",
         }}
         initial={{ top: 0, opacity: 0 }}
         animate={
@@ -494,8 +494,8 @@ function Datastream({ phase }: { phase: Phase }) {
       <motion.div
         className="absolute inset-x-0 h-px"
         style={{
-          background: "linear-gradient(90deg, transparent, rgba(186,230,253,0.7), transparent)",
-          boxShadow: "0 0 8px rgba(125,211,252,0.55)",
+          background: "linear-gradient(90deg, transparent, rgba(108,198,255,0.7), transparent)",
+          boxShadow: "0 0 8px rgba(47,140,255,0.55)",
         }}
         initial={{ top: "100%", opacity: 0 }}
         animate={phase === "settle" ? { top: "0%", opacity: [0, 0.8, 0] } : { top: "100%", opacity: 0 }}
@@ -544,9 +544,9 @@ function Stripe({
           className="leading-[1] text-[11px]"
           style={{
             color: i === 0
-              ? "rgba(186,230,253,1)"
-              : `rgba(125,211,252,${0.9 - i * 0.16})`,
-            textShadow: "0 0 8px rgba(125,211,252,0.95)",
+              ? "rgba(108,198,255,1)"
+              : `rgba(47,140,255,${0.9 - i * 0.16})`,
+            textShadow: "0 0 8px rgba(47,140,255,0.95)",
           }}
         >
           {g}
@@ -590,10 +590,10 @@ function TacticalChip({ phase, label }: { phase: Phase; label: string }) {
       style={{
         fontSize: 9,
         letterSpacing: "0.18em",
-        color: "rgba(186,230,253,0.95)",
+        color: "rgba(108,198,255,0.95)",
         background: "rgba(14,24,42,0.55)",
-        border: "1px solid rgba(125,211,252,0.55)",
-        boxShadow: "0 0 18px -4px rgba(125,211,252,0.65), 0 0 0 1px rgba(186,230,253,0.1) inset",
+        border: "1px solid rgba(47,140,255,0.55)",
+        boxShadow: "0 0 18px -4px rgba(47,140,255,0.65), 0 0 0 1px rgba(108,198,255,0.1) inset",
         backdropFilter: "blur(6px)",
       }}
       initial={{ opacity: 0, x: 8, scale: 0.9 }}
@@ -620,7 +620,7 @@ function EdgeBreath({ phase }: { phase: Phase }) {
     <motion.div
       className="absolute inset-0 rounded-xl"
       style={{
-        boxShadow: "0 0 0 1px rgba(125,211,252,0.45) inset, 0 0 28px -4px rgba(125,211,252,0.55)",
+        boxShadow: "0 0 0 1px rgba(47,140,255,0.45) inset, 0 0 28px -4px rgba(47,140,255,0.55)",
       }}
       initial={{ opacity: 0 }}
       animate={

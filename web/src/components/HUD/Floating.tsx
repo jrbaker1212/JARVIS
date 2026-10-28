@@ -514,7 +514,7 @@ export default function Floating({
             style={{ opacity: focused ? 0.7 : 0.25 }}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M9 1 L1 9 M9 5 L5 9 M9 9 L9 9" stroke="rgba(186,230,253,0.85)" strokeWidth="1.2" strokeLinecap="round" />
+              <path d="M9 1 L1 9 M9 5 L5 9 M9 9 L9 9" stroke="rgba(108,198,255,0.85)" strokeWidth="1.2" strokeLinecap="round" />
             </svg>
           </div>
         </div>

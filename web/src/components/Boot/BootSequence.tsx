@@ -43,7 +43,7 @@ export default function BootSequence() {
               <motion.div
                 className="absolute inset-0 rounded-full"
                 style={{
-                  background: "radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(0,212,255,0.25) 35%, transparent 65%)",
+                  background: "radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(47,140,255,0.25) 35%, transparent 65%)",
                   filter: "blur(6px)",
                 }}
                 animate={{ scale: [1, 1.12, 1], opacity: [0.7, 1, 0.7] }}
@@ -60,7 +60,7 @@ export default function BootSequence() {
                 transition={{ duration: 3.2, repeat: Infinity, ease: "linear" }}
               />
               <motion.div
-                className="absolute inset-[2.75rem] rounded-full bg-white/90 shadow-[0_0_24px_rgba(125,249,255,0.75)]"
+                className="absolute inset-[2.75rem] rounded-full bg-white/90 shadow-[0_0_24px_rgba(108,198,255,0.75)]"
                 animate={{ scale: [1, 1.15, 1], opacity: [0.85, 1, 0.85] }}
                 transition={{ duration: 1.4, repeat: Infinity }}
               />

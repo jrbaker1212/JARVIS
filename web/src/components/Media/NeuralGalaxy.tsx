@@ -129,7 +129,7 @@ export default function NeuralGalaxy({ card, large = false }: { card: MediaCard;
       ctx.fillRect(0, 0, w, h);
       // soft vignette
       const grad = ctx.createRadialGradient(w/2, h/2, 30, w/2, h/2, Math.max(w, h) * 0.6);
-      grad.addColorStop(0, "rgba(34,211,238,0.06)");
+      grad.addColorStop(0, "rgba(108,198,255,0.06)");
       grad.addColorStop(1, "rgba(2,6,15,0)");
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);

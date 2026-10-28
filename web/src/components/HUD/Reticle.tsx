@@ -79,7 +79,7 @@ export default function Reticle() {
         height: 28,
         opacity: locked ? 1 : 0,
         transition: "width 110ms ease-out, height 110ms ease-out, opacity 120ms ease-out",
-        filter: locked ? "drop-shadow(0 0 8px rgba(165,243,252,0.55))" : "none",
+        filter: locked ? "drop-shadow(0 0 8px rgba(108,198,255,0.55))" : "none",
       }}
     >
       {/* Corner ticks */}
@@ -88,7 +88,7 @@ export default function Reticle() {
       <div className={`absolute bottom-0 left-0 w-2.5 h-2.5 border-b border-l rounded-bl-md ${color} transition-[border-color] duration-200`} />
       <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 border-b border-r rounded-br-md ${color} transition-[border-color] duration-200`} />
       {/* Center dot */}
-      <div className="absolute inset-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-jarvis-aqua shadow-[0_0_6px_rgba(165,243,252,0.9)]" />
+      <div className="absolute inset-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-jarvis-aqua shadow-[0_0_6px_rgba(108,198,255,0.9)]" />
       {/* Label */}
       {label && (
         <div className="absolute -top-5 left-full ml-2 whitespace-nowrap glass-chip text-jarvis-aqua border-jarvis-aqua/30">

@@ -171,7 +171,7 @@ export default function ArticleReader() {
                       alt=""
                       referrerPolicy="no-referrer"
                       className="w-full max-h-[360px] object-cover rounded-xl mb-5"
-                      style={{ border: "1px solid rgba(186,230,253,0.18)" }}
+                      style={{ border: "1px solid rgba(108,198,255,0.18)" }}
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                     />
                   )}

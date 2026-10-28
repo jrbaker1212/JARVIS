@@ -53,9 +53,9 @@ export default function PlanPanel() {
           className="absolute inset-y-0 left-0"
           style={{
             background: plan.complete
-              ? "linear-gradient(90deg, #7dd3fc, #86efac)"
-              : "linear-gradient(90deg, #7dd3fc, #a5f3fc)",
-            boxShadow: "0 0 12px rgba(125,211,252,0.7)",
+              ? "linear-gradient(90deg, #6CC6FF, #86efac)"
+              : "linear-gradient(90deg, #6CC6FF, #6CC6FF)",
+            boxShadow: "0 0 12px rgba(47,140,255,0.7)",
           }}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -84,7 +84,7 @@ export default function PlanPanel() {
                       ? "rgba(134,239,172,0.92)"
                       : active
                       ? "rgba(213,244,255,0.95)"
-                      : "rgba(186,230,253,0.6)",
+                      : "rgba(108,198,255,0.6)",
                     textDecoration: checked ? "none" : "none",
                   }}
                 >
@@ -119,9 +119,9 @@ function StepDot({ checked, active }: { checked: boolean; active: boolean }) {
     <span
       className={`mt-0.5 w-4 h-4 rounded-full shrink-0 border ${active ? "animate-pulse" : ""}`}
       style={{
-        borderColor: active ? "rgba(125,211,252,0.95)" : "rgba(186,230,253,0.3)",
-        background: active ? "rgba(125,211,252,0.15)" : "transparent",
-        boxShadow: active ? "0 0 10px rgba(125,211,252,0.6)" : "none",
+        borderColor: active ? "rgba(47,140,255,0.95)" : "rgba(108,198,255,0.3)",
+        background: active ? "rgba(47,140,255,0.15)" : "transparent",
+        boxShadow: active ? "0 0 10px rgba(47,140,255,0.6)" : "none",
       }}
     />
   );

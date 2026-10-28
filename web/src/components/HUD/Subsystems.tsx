@@ -75,8 +75,8 @@ export default function Subsystems() {
           const barGrad =
             r.status === "crit" ? "linear-gradient(90deg, rgba(251,113,133,0.95), rgba(251,113,133,0.6))"
             : r.status === "warn" ? "linear-gradient(90deg, rgba(251,191,36,0.95), rgba(251,191,36,0.6))"
-            : r.status === "off"  ? "linear-gradient(90deg, rgba(186,230,253,0.3), rgba(186,230,253,0.15))"
-            :                       "linear-gradient(90deg, rgba(125,211,252,0.95), rgba(167,139,250,0.7))";
+            : r.status === "off"  ? "linear-gradient(90deg, rgba(108,198,255,0.3), rgba(108,198,255,0.15))"
+            :                       "linear-gradient(90deg, rgba(47,140,255,0.95), rgba(167,139,250,0.7))";
           return (
             <li key={r.key} className="min-w-0">
               <div className="flex items-center justify-between gap-2 min-w-0">
@@ -90,7 +90,7 @@ export default function Subsystems() {
                     style={{
                       width: `${r.pct}%`,
                       background: barGrad,
-                      boxShadow: "0 0 10px rgba(125,211,252,0.45)",
+                      boxShadow: "0 0 10px rgba(47,140,255,0.45)",
                     }}
                   />
                 </div>

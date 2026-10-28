@@ -70,11 +70,11 @@ function ItemFlash({ delay = 0, full = false }: { delay?: number; full?: boolean
               bottom: !isTop ? 4 : "auto",
               left:   isLeft ? 4 : "auto",
               right:  !isLeft ? 4 : "auto",
-              borderTop:    isTop  ? "1.5px solid rgba(186,230,253,0.95)" : "none",
-              borderBottom: !isTop ? "1.5px solid rgba(186,230,253,0.95)" : "none",
-              borderLeft:   isLeft ? "1.5px solid rgba(186,230,253,0.95)" : "none",
-              borderRight:  !isLeft ? "1.5px solid rgba(186,230,253,0.95)" : "none",
-              filter: "drop-shadow(0 0 4px rgba(125,211,252,0.85))",
+              borderTop:    isTop  ? "1.5px solid rgba(108,198,255,0.95)" : "none",
+              borderBottom: !isTop ? "1.5px solid rgba(108,198,255,0.95)" : "none",
+              borderLeft:   isLeft ? "1.5px solid rgba(108,198,255,0.95)" : "none",
+              borderRight:  !isLeft ? "1.5px solid rgba(108,198,255,0.95)" : "none",
+              filter: "drop-shadow(0 0 4px rgba(47,140,255,0.85))",
             }}
             initial={{ opacity: 0, scale: 1.8 }}
             animate={{ opacity: [0, 1, 0], scale: [1.8, 1, 0.9] }}
@@ -88,7 +88,7 @@ function ItemFlash({ delay = 0, full = false }: { delay?: number; full?: boolean
           top: 0, left: 0,
           width: "200%", height: "200%",
           background:
-            "linear-gradient(115deg, transparent 35%, rgba(186,230,253,0.55) 48%, rgba(186,230,253,0.95) 50%, rgba(186,230,253,0.55) 52%, transparent 65%)",
+            "linear-gradient(115deg, transparent 35%, rgba(108,198,255,0.55) 48%, rgba(108,198,255,0.95) 50%, rgba(108,198,255,0.55) 52%, transparent 65%)",
           filter: "blur(1.2px)",
           mixBlendMode: "screen",
         }}
@@ -99,7 +99,7 @@ function ItemFlash({ delay = 0, full = false }: { delay?: number; full?: boolean
       {full && (
         <motion.div
           className="absolute inset-0"
-          style={{ background: "rgba(186,230,253,0.7)", mixBlendMode: "screen" }}
+          style={{ background: "rgba(108,198,255,0.7)", mixBlendMode: "screen" }}
           initial={{ opacity: 0 }}
           animate={{ opacity: [0, 0.55, 0] }}
           transition={{ duration: 0.32, delay, ease: "easeOut", times: [0, 0.15, 1] }}
@@ -118,7 +118,7 @@ interface Props {
   accent?: string;
 }
 
-export default function MediaHub({ kinds, title, accent = "#7dd3fc" }: Props) {
+export default function MediaHub({ kinds, title, accent = "#6CC6FF" }: Props) {
   const media       = useStore((s) => s.media);
   const setLightbox = useStore((s) => s.setLightbox);
   const removeMedia = useStore((s) => s.removeMedia);
@@ -272,7 +272,7 @@ function Card({
         background: "rgba(14, 24, 42, 0.32)",
         backdropFilter: "blur(14px) saturate(150%)",
         WebkitBackdropFilter: "blur(14px) saturate(150%)",
-        border: `1px solid ${hovered ? "rgba(186,230,253,0.28)" : "rgba(186,230,253,0.10)"}`,
+        border: `1px solid ${hovered ? "rgba(108,198,255,0.28)" : "rgba(108,198,255,0.10)"}`,
         boxShadow: "0 1px 0 0 rgba(255,255,255,0.04) inset, 0 4px 12px -4px rgba(0,0,0,0.35)",
       }}
     >
@@ -351,8 +351,8 @@ function SearchGrid({ items, onPick, large }: { items: MediaItem[]; onPick: (it:
             <motion.div
               className="absolute left-0 top-0 bottom-0 w-[2px]"
               style={{
-                background: "linear-gradient(180deg, transparent, rgba(186,230,253,0.95), transparent)",
-                boxShadow: "0 0 12px rgba(125,211,252,0.85)",
+                background: "linear-gradient(180deg, transparent, rgba(108,198,255,0.95), transparent)",
+                boxShadow: "0 0 12px rgba(47,140,255,0.85)",
               }}
               initial={{ scaleY: 0, opacity: 0 }}
               animate={{ scaleY: [0, 1, 1, 0], opacity: [0, 1, 1, 0] }}
@@ -487,7 +487,7 @@ function ImageMasonry({ items, onPick, large }: { items: MediaItem[]; onPick: (i
         className="relative overflow-hidden rounded-xl group cursor-pointer w-full"
         style={{
           background: "rgba(14,24,42,0.35)",
-          border: "1px solid rgba(186,230,253,0.10)",
+          border: "1px solid rgba(108,198,255,0.10)",
           minHeight: large ? 360 : 220,
           perspective: 800,
         }}
@@ -541,7 +541,7 @@ function ImageMasonry({ items, onPick, large }: { items: MediaItem[]; onPick: (i
             className="relative overflow-hidden group rounded-xl"
             style={{
               background: "rgba(14,24,42,0.35)",
-              border: "1px solid rgba(186,230,253,0.10)",
+              border: "1px solid rgba(108,198,255,0.10)",
               boxShadow: "0 4px 12px -4px rgba(0,0,0,0.4)",
               minHeight: minTile,
               perspective: 800,
@@ -561,7 +561,7 @@ function ImageMasonry({ items, onPick, large }: { items: MediaItem[]; onPick: (i
             />
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-jarvis-ink/75 via-transparent to-transparent" />
             <div className="absolute inset-0 rounded-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                 style={{ boxShadow: "0 0 0 1px rgba(186,230,253,0.45) inset, 0 0 24px -4px rgba(125,211,252,0.45)" }} />
+                 style={{ boxShadow: "0 0 0 1px rgba(108,198,255,0.45) inset, 0 0 24px -4px rgba(47,140,255,0.45)" }} />
             {(it.title || it.host) && (
               <div className="absolute inset-x-0 bottom-0 px-2 py-1 opacity-90 group-hover:opacity-100 transition-opacity">
                 <div className="text-[10px] text-jarvis-ice truncate">
@@ -588,8 +588,8 @@ function VideoGrid({
         <div
           className="relative w-full aspect-video bg-black rounded-xl overflow-hidden"
           style={{
-            border: "1px solid rgba(186,230,253,0.18)",
-            boxShadow: "0 0 0 1px rgba(125,211,252,0.08) inset, 0 16px 48px -16px rgba(0,0,0,0.7), 0 0 32px -8px rgba(125,211,252,0.25)",
+            border: "1px solid rgba(108,198,255,0.18)",
+            boxShadow: "0 0 0 1px rgba(47,140,255,0.08) inset, 0 16px 48px -16px rgba(0,0,0,0.7), 0 0 32px -8px rgba(47,140,255,0.25)",
           }}
         >
           <iframe
@@ -638,7 +638,7 @@ function VideoGrid({
             className="relative text-left overflow-hidden group rounded-xl"
             style={{
               background: "rgba(14,24,42,0.32)",
-              border: "1px solid rgba(186,230,253,0.10)",
+              border: "1px solid rgba(108,198,255,0.10)",
               boxShadow: "0 4px 14px -4px rgba(0,0,0,0.4)",
               perspective: 800,
             }}
@@ -658,8 +658,8 @@ function VideoGrid({
               <motion.div
                 className="absolute inset-x-0 h-[2px] pointer-events-none"
                 style={{
-                  background: "linear-gradient(90deg, transparent, rgba(186,230,253,0.95), transparent)",
-                  boxShadow: "0 0 14px rgba(125,211,252,0.85), 0 0 4px rgba(186,230,253,1)",
+                  background: "linear-gradient(90deg, transparent, rgba(108,198,255,0.95), transparent)",
+                  boxShadow: "0 0 14px rgba(47,140,255,0.85), 0 0 4px rgba(108,198,255,1)",
                   mixBlendMode: "screen",
                 }}
                 initial={{ top: "-4%", opacity: 0 }}
@@ -670,8 +670,8 @@ function VideoGrid({
                 <div
                   className="w-14 h-14 rounded-full flex items-center justify-center transition-all group-hover:scale-110"
                   style={{
-                    background: "linear-gradient(135deg, rgba(165,243,252,0.95), rgba(125,211,252,0.9))",
-                    boxShadow: "0 0 0 1px rgba(255,255,255,0.3) inset, 0 8px 24px -4px rgba(125,211,252,0.7), 0 0 40px -4px rgba(167,139,250,0.4)",
+                    background: "linear-gradient(135deg, rgba(108,198,255,0.95), rgba(47,140,255,0.9))",
+                    boxShadow: "0 0 0 1px rgba(255,255,255,0.3) inset, 0 8px 24px -4px rgba(47,140,255,0.7), 0 0 40px -4px rgba(167,139,250,0.4)",
                   }}
                 >
                   <span className="text-jarvis-abyss text-lg translate-x-0.5">▶</span>
@@ -713,7 +713,7 @@ function PageEmbed({ item, large }: { item: MediaItem; large: boolean }) {
         </a>
       </div>
       <div className={`relative w-full rounded-xl overflow-hidden ${large ? "h-[72vh]" : "h-[44vh]"}`}
-           style={{ border: "1px solid rgba(186,230,253,0.15)", boxShadow: "0 12px 36px -12px rgba(0,0,0,0.6)" }}>
+           style={{ border: "1px solid rgba(108,198,255,0.15)", boxShadow: "0 12px 36px -12px rgba(0,0,0,0.6)" }}>
         <iframe
           src={proxied}
           title={item.title || item.url}
@@ -729,17 +729,17 @@ function PageEmbed({ item, large }: { item: MediaItem; large: boolean }) {
 /* ═════════════ Bits ═════════════ */
 function KindBadge({ kind }: { kind: MediaKind }) {
   const map: Record<string, { label: string; bg: string; border: string; text: string }> = {
-    search: { label: "WEB",    bg: "rgba(125,211,252,0.12)", border: "rgba(125,211,252,0.40)", text: "#7dd3fc" },
+    search: { label: "WEB",    bg: "rgba(47,140,255,0.12)", border: "rgba(47,140,255,0.40)", text: "#6CC6FF" },
     news:   { label: "NEWS",   bg: "rgba(252,165,165,0.12)", border: "rgba(252,165,165,0.40)", text: "#fca5a5" },
-    image:  { label: "IMAGE",  bg: "rgba(165,243,252,0.12)", border: "rgba(165,243,252,0.40)", text: "#a5f3fc" },
-    images: { label: "IMAGES", bg: "rgba(165,243,252,0.12)", border: "rgba(165,243,252,0.40)", text: "#a5f3fc" },
+    image:  { label: "IMAGE",  bg: "rgba(108,198,255,0.12)", border: "rgba(108,198,255,0.40)", text: "#6CC6FF" },
+    images: { label: "IMAGES", bg: "rgba(108,198,255,0.12)", border: "rgba(108,198,255,0.40)", text: "#6CC6FF" },
     video:  { label: "VIDEO",  bg: "rgba(251,191,36,0.12)",  border: "rgba(251,191,36,0.40)",  text: "#fbbf24" },
     videos: { label: "VIDEOS", bg: "rgba(251,191,36,0.12)",  border: "rgba(251,191,36,0.40)",  text: "#fbbf24" },
-    page:   { label: "PAGE",   bg: "rgba(186,230,253,0.12)", border: "rgba(186,230,253,0.40)", text: "#bae6fd" },
-    pdf:    { label: "PDF",    bg: "rgba(186,230,253,0.12)", border: "rgba(186,230,253,0.40)", text: "#bae6fd" },
+    page:   { label: "PAGE",   bg: "rgba(108,198,255,0.12)", border: "rgba(108,198,255,0.40)", text: "#bae6fd" },
+    pdf:    { label: "PDF",    bg: "rgba(108,198,255,0.12)", border: "rgba(108,198,255,0.40)", text: "#bae6fd" },
     webcam: { label: "CAM",    bg: "rgba(251,113,133,0.12)", border: "rgba(251,113,133,0.40)", text: "#fb7185" },
     galaxy: { label: "MEMORY", bg: "rgba(167,139,250,0.14)", border: "rgba(167,139,250,0.40)", text: "#a78bfa" },
-    model3d:{ label: "3D",     bg: "rgba(186,230,253,0.12)", border: "rgba(186,230,253,0.40)", text: "#bae6fd" },
+    model3d:{ label: "3D",     bg: "rgba(108,198,255,0.12)", border: "rgba(108,198,255,0.40)", text: "#bae6fd" },
   };
   const c = map[kind] || map.search;
   return (

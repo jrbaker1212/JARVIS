@@ -59,7 +59,7 @@ export default function ChatPanel() {
         style={{
           // subtle phosphor wash
           backgroundImage:
-            "linear-gradient(180deg, rgba(125,211,252,0.025) 0%, rgba(3,7,15,0) 30%)",
+            "linear-gradient(180deg, rgba(47,140,255,0.025) 0%, rgba(3,7,15,0) 30%)",
         }}
       >
         {chat.length === 0 ? (

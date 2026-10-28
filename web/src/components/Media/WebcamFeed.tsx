@@ -106,7 +106,7 @@ export default function WebcamFeed({ item, large = false }: { item: MediaItem; l
 
   return (
     <div className="relative">
-      <div className={`relative bg-black border border-jarvis-aqua/50 shadow-[0_0_20px_rgba(34,211,238,0.18)] ${sizeClasses}`}>
+      <div className={`relative bg-black border border-jarvis-aqua/50 shadow-[0_0_20px_rgba(108,198,255,0.18)] ${sizeClasses}`}>
         {err ? (
           <div className="absolute inset-0 flex items-center justify-center text-mono text-xs text-jarvis-danger px-4 text-center">
             camera unavailable · {err}
@@ -133,11 +133,11 @@ export default function WebcamFeed({ item, large = false }: { item: MediaItem; l
 
         {/* Crosshair guide rails */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <line x1="50" y1="0"   x2="50" y2="5"   stroke="rgba(103,232,249,0.5)" strokeWidth="0.25" />
-          <line x1="50" y1="95"  x2="50" y2="100" stroke="rgba(103,232,249,0.5)" strokeWidth="0.25" />
-          <line x1="0"  y1="50"  x2="5"  y2="50"  stroke="rgba(103,232,249,0.5)" strokeWidth="0.25" />
-          <line x1="95" y1="50"  x2="100" y2="50" stroke="rgba(103,232,249,0.5)" strokeWidth="0.25" />
-          <rect x="38" y="28" width="24" height="44" fill="none" stroke="rgba(103,232,249,0.25)" strokeWidth="0.18" strokeDasharray="1 1" />
+          <line x1="50" y1="0"   x2="50" y2="5"   stroke="rgba(108,198,255,0.5)" strokeWidth="0.25" />
+          <line x1="50" y1="95"  x2="50" y2="100" stroke="rgba(108,198,255,0.5)" strokeWidth="0.25" />
+          <line x1="0"  y1="50"  x2="5"  y2="50"  stroke="rgba(108,198,255,0.5)" strokeWidth="0.25" />
+          <line x1="95" y1="50"  x2="100" y2="50" stroke="rgba(108,198,255,0.5)" strokeWidth="0.25" />
+          <rect x="38" y="28" width="24" height="44" fill="none" stroke="rgba(108,198,255,0.25)" strokeWidth="0.18" strokeDasharray="1 1" />
         </svg>
 
         {/* Top HUD strip */}
@@ -167,7 +167,7 @@ export default function WebcamFeed({ item, large = false }: { item: MediaItem; l
         <div
           className="absolute inset-0 pointer-events-none mix-blend-overlay opacity-25"
           style={{
-            background: "repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(34,211,238,0.10) 3px, transparent 4px)",
+            background: "repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(108,198,255,0.10) 3px, transparent 4px)",
           }}
         />
       </div>

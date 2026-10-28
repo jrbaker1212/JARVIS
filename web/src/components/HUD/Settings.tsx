@@ -167,8 +167,8 @@ function Toggle({
         onClick={() => onChange(!value)}
         className="relative w-9 h-5 rounded-full transition-colors"
         style={{
-          background: value ? "rgba(125,211,252,0.7)" : "rgba(186,230,253,0.15)",
-          boxShadow: value ? "0 0 12px rgba(125,211,252,0.6)" : "none",
+          background: value ? "rgba(47,140,255,0.7)" : "rgba(108,198,255,0.15)",
+          boxShadow: value ? "0 0 12px rgba(47,140,255,0.6)" : "none",
         }}
       >
         <span
