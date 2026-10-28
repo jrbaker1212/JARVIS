@@ -40,7 +40,7 @@ def core_reply(user_text: str, cfg: Config) -> str | None:
         re.search(r"^\s*(?:hey|hello|hi|sup|yo)\b", text, re.IGNORECASE)
         and len(text) <= 48
     ):
-        return "Online, sir. Systems are nominal. What shall we tackle?"
+        return "Collective online. Systems nominal. What are we building?"
 
     if _IDENTITY_RE.search(text):
         return (
@@ -51,18 +51,18 @@ def core_reply(user_text: str, cfg: Config) -> str | None:
     if _MODEL_RE.search(text):
         return (
             f"I am running `{cfg.model.model}` through the `{cfg.model.provider}` "
-            f"adapter at `{cfg.model.endpoint}`, sir."
+            f"adapter at `{cfg.model.endpoint}`."
         )
 
     if _OS_RE.search(text):
         return (
             f"You are on {platform.system()} {platform.release()} "
-            f"({platform.version()}), host `{platform.node()}`, sir."
+            f"({platform.version()}), host `{platform.node()}`."
         )
 
     if _CYBER_ABUSE_RE.search(text):
         return (
-            "I cannot help attack, harass, or compromise someone, sir. "
+            "I cannot help attack, harass, or compromise someone. "
             "I can help with defensive security, authorized testing, account recovery, "
             "or hardening your own systems."
         )

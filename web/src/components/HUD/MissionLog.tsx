@@ -44,7 +44,7 @@ export default function MissionLog() {
       </div>
       <ul className="space-y-0.5 max-h-40 overflow-hidden">
         {items.length === 0 && (
-          <li className="text-mono text-[10px] text-jarvis-cyan/40 italic px-1">No events. Awaiting orders, sir.</li>
+          <li className="text-mono text-[10px] text-jarvis-cyan/40 italic px-1">No events. Collective standing by.</li>
         )}
         {items.map((e) => (
           <li key={e.id} className="flex items-baseline gap-2 px-1 text-mono text-[10px] leading-tight">

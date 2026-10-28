@@ -5,6 +5,8 @@ and the event stream consumed by the UI.
 """
 from __future__ import annotations
 
+from jarvis.core.voice_lines import ACK_GENERIC, ACK_MANY, ACK_ONE
+
 import asyncio
 import logging
 import re
@@ -46,10 +48,10 @@ MAX_TOOL_HOPS = 40
 def _spoken_tool_ack(tool_calls: list[ToolCall]) -> str:
     names = [(tc.name or "").replace("_", " ") for tc in tool_calls if (tc.name or "").strip()][:3]
     if not names:
-        return "Understood, sir. Working on that now."
+        return ACK_GENERIC
     if len(names) == 1:
-        return f"On it, sir. {names[0]}."
-    return f"Right away, sir. {', '.join(names)}."
+        return ACK_ONE.format(tool=names[0])
+    return ACK_MANY.format(tools=", ".join(names))
 
 # Phrases that indicate the model is *promising* an action without doing it.
 # When matched in a text-only assistant reply (no tool calls in the same hop),
@@ -461,7 +463,7 @@ class Orchestrator:
             )
             async for ev in run_swarm(self, tasks):
                 yield ev
-            final = f"Ran {len(tasks)} requests in parallel, sir."
+            final = f"Ran {len(tasks)} requests in parallel."
             self._history.append({"role": "assistant", "content": final})
             self.memory.append_message("assistant", final)
             yield Event(EventKind.ASSISTANT, text=final)
@@ -689,7 +691,7 @@ class Orchestrator:
 
             if not reply.tool_calls:
                 fallback = (
-                    "I am online, sir, but the local model returned no usable text. "
+                    "I am online, but the local model returned no usable text. "
                     "Give me the order once more and I will re-run it cleanly."
                 )
                 self._history.append({"role": "assistant", "content": fallback})

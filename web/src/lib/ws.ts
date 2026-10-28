@@ -315,17 +315,17 @@ class JarvisWS {
             });
           }
           const TASK_ANNOUNCE: Record<string, string> = {
-            image_generate:  "Generating image now, sir. Stand by…",
-            image_to_3d:     "Converting image to 3D model, sir. This will take a moment…",
-            text_to_3d:      "Generating 3D model from text, sir. Stand by…",
-            web_search:      "Searching the web, sir…",
-            image_search:    "Searching for images, sir…",
-            video_search:    "Searching for videos, sir…",
-            browser_open:    "Opening page, sir…",
-            run_shell:       "Running command, sir…",
-            shell:           "Running command, sir…",
-            search_memory:   "Searching memory, sir…",
-            memory_galaxy:   "Building memory map, sir…",
+            image_generate:  "Generating image now. Stand by…",
+            image_to_3d:     "Converting image to 3D model. This will take a moment…",
+            text_to_3d:      "Generating 3D model from text. Stand by…",
+            web_search:      "Searching the web…",
+            image_search:    "Searching for images…",
+            video_search:    "Searching for videos…",
+            browser_open:    "Opening page…",
+            run_shell:       "Running command…",
+            shell:           "Running command…",
+            search_memory:   "Searching memory…",
+            memory_galaxy:   "Building memory map…",
           };
           const msg = TASK_ANNOUNCE[toolName];
           if (msg) {

@@ -80,25 +80,25 @@ def direct_pc_command(user_text: str) -> DirectCommand | None:
     if folder:
         return DirectCommand(
             tool_call=ToolCall("mkdir", {"path": str(folder)}),
-            final_prefix="Created the folder, sir.",
+            final_prefix="Created the folder.",
         )
 
     if _LIST_DESKTOP_RE.search(text):
         return DirectCommand(
             tool_call=ToolCall("list_dir", {"path": str(desktop_path()), "glob": "*", "recursive": False}),
-            final_prefix="Desktop scan complete, sir.",
+            final_prefix="Desktop scan complete.",
         )
 
     if _SYSTEM_STATUS_RE.search(text):
         return DirectCommand(
             tool_call=ToolCall("system_status", {}),
-            final_prefix="System status, sir.",
+            final_prefix="System status.",
         )
 
     if _SCREENSHOT_BROWSER_RE.search(text):
         return DirectCommand(
             tool_call=ToolCall("browser_screenshot", {"full_page": False}),
-            final_prefix="Browser screenshot captured, sir.",
+            final_prefix="Browser screenshot captured.",
         )
 
     agent_match = _AGENT_BACKEND_RE.search(text)
@@ -116,28 +116,28 @@ def direct_pc_command(user_text: str) -> DirectCommand | None:
                         "timeout": 1800,
                     },
                 ),
-                final_prefix="Agent backend run complete, sir.",
+                final_prefix="Agent backend run complete.",
             )
 
     open_match = _OPEN_BROWSER_RE.search(text)
     if open_match and _looks_like_browser_target(open_match.group("target")):
         return DirectCommand(
             tool_call=ToolCall("browser_open", {"url": open_match.group("target").strip()}),
-            final_prefix="Browser navigation complete, sir.",
+            final_prefix="Browser navigation complete.",
         )
 
     ps_match = _RUN_PS_RE.search(text)
     if ps_match:
         return DirectCommand(
             tool_call=ToolCall("run_powershell", {"command": ps_match.group("command").strip()}),
-            final_prefix="PowerShell command complete, sir.",
+            final_prefix="PowerShell command complete.",
         )
 
     cmd_match = _RUN_CMD_RE.search(text)
     if cmd_match:
         return DirectCommand(
             tool_call=ToolCall("run_shell", {"command": cmd_match.group("command").strip()}),
-            final_prefix="Command complete, sir.",
+            final_prefix="Command complete.",
         )
 
     return None

@@ -274,7 +274,7 @@ let _id = 0;
 export const nextId = () => `${Date.now().toString(36)}-${(_id++).toString(36)}`;
 
 const BOOT_GREETING_RE =
-  /^Good (morning|afternoon|evening), sir\. All systems are online and at your service\.$/;
+  /^Good (morning|afternoon|evening)(, sir)?\. All systems are online and at your service\.$/;
 
 function isBootGreeting(entry: ChatEntry) {
   return entry.role === "assistant" && BOOT_GREETING_RE.test(entry.text.trim());

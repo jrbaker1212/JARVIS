@@ -124,7 +124,7 @@ def _build_image_search(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="image_search",
         tool_call=ToolCall("image_search", {"query": q, "max_results": 12}),
-        final_prefix=f"Image grid for “{q}”, sir.",
+        final_prefix=f"Image grid for “{q}”.",
         raw_match=m.group(0),
     )
 
@@ -148,7 +148,7 @@ def _build_video_search(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="video_search",
         tool_call=ToolCall("video_search", {"query": q, "max_results": 8}),
-        final_prefix=f"Video results for “{q}”, sir.",
+        final_prefix=f"Video results for “{q}”.",
         raw_match=m.group(0),
     )
 
@@ -196,7 +196,7 @@ def _build_web_search(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="web_search",
         tool_call=ToolCall("web_search", {"query": q, "max_results": 8}),
-        final_prefix=f"Search complete for “{q}”, sir.",
+        final_prefix=f"Search complete for “{q}”.",
         raw_match=m.group(0),
     )
 
@@ -220,7 +220,7 @@ def _build_news_bare(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="web_search",
         tool_call=ToolCall("web_search", {"query": "latest news today", "max_results": 8}),
-        final_prefix="The latest headlines are in the Media Bay, sir.",
+        final_prefix="The latest headlines are in the Media Bay.",
         raw_match=m.group(0),
     )
 
@@ -243,7 +243,7 @@ def _build_open_inline(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="open_inline",
         tool_call=ToolCall("open_inline", {"url": u}),
-        final_prefix=f"Embedded {u} in the Media Bay, sir.",
+        final_prefix=f"Embedded {u} in the Media Bay.",
         raw_match=m.group(0),
     )
 
@@ -270,7 +270,7 @@ def _build_image_gen(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="image_generate",
         tool_call=ToolCall("image_generate", {"prompt": q}),
-        final_prefix=f"Image rendered for “{q}”, sir.",
+        final_prefix=f"Image rendered for “{q}”.",
         raw_match=m.group(0),
     )
 
@@ -293,7 +293,7 @@ def _build_text_to_3d(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="text_to_3d",
         tool_call=ToolCall("text_to_3d", {"prompt": q}),
-        final_prefix=f"3D model generated for “{q}”, sir.",
+        final_prefix=f"3D model generated for “{q}”.",
         raw_match=m.group(0),
     )
 
@@ -314,7 +314,7 @@ def _build_memory_galaxy(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="memory_galaxy",
         tool_call=ToolCall("memory_galaxy", {}),
-        final_prefix="Neural cloud surfaced, sir.",
+        final_prefix="Neural cloud surfaced.",
         raw_match=m.group(0),
     )
 
@@ -335,7 +335,7 @@ def _build_webcam_see(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="webcam_see",
         tool_call=ToolCall("webcam_see", {}),
-        final_prefix="Vision pass complete, sir.",
+        final_prefix="Vision pass complete.",
         raw_match=m.group(0),
     )
 
@@ -367,7 +367,7 @@ def _build_create_folder(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="create_folder",
         tool_call=ToolCall("mkdir", {"path": str(base / name)}),
-        final_prefix="Created the folder, sir.",
+        final_prefix="Created the folder.",
         raw_match=m.group(0),
     )
 
@@ -382,7 +382,7 @@ def _build_list_desktop(_m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="list_desktop",
         tool_call=ToolCall("list_dir", {"path": str(_desktop_path()), "glob": "*", "recursive": False}),
-        final_prefix="Desktop scan complete, sir.",
+        final_prefix="Desktop scan complete.",
     )
 
 
@@ -396,7 +396,7 @@ def _build_system_status(_m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="system_status",
         tool_call=ToolCall("system_status", {}),
-        final_prefix="System status, sir.",
+        final_prefix="System status.",
     )
 
 
@@ -410,7 +410,7 @@ def _build_browser_screenshot(_m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="browser_screenshot",
         tool_call=ToolCall("browser_screenshot", {"full_page": False}),
-        final_prefix="Browser screenshot captured, sir.",
+        final_prefix="Browser screenshot captured.",
     )
 
 
@@ -447,7 +447,7 @@ def _build_agent_backend(m: re.Match) -> IntentMatch | None:
             "goal": goal, "backend": backend, "cwd": str(Path.cwd()),
             "max_turns": 20, "timeout": 1800,
         }),
-        final_prefix="Agent backend run complete, sir.",
+        final_prefix="Agent backend run complete.",
     )
 
 
@@ -468,7 +468,7 @@ def _build_open_browser(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="open_browser",
         tool_call=ToolCall("browser_open", {"url": target}),
-        final_prefix="Browser navigation complete, sir.",
+        final_prefix="Browser navigation complete.",
     )
 
 
@@ -482,7 +482,7 @@ def _build_run_ps(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="run_powershell",
         tool_call=ToolCall("run_powershell", {"command": m.group("command").strip()}),
-        final_prefix="PowerShell command complete, sir.",
+        final_prefix="PowerShell command complete.",
     )
 
 
@@ -496,7 +496,7 @@ def _build_run_cmd(m: re.Match) -> IntentMatch | None:
     return IntentMatch(
         name="run_shell",
         tool_call=ToolCall("run_shell", {"command": m.group("command").strip()}),
-        final_prefix="Command complete, sir.",
+        final_prefix="Command complete.",
     )
 
 

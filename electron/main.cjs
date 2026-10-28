@@ -234,7 +234,7 @@ function rebuildTrayMenu() {
     },
     { type: "separator" },
     {
-      label: "Quit JARVIS",
+      label: "Quit NEXEY",
       click: () => { isQuiting = true; app.quit(); },
     },
   ]);

@@ -291,7 +291,7 @@ export default function App() {
       if (fingerprint === lastFingerprint) return;
       if (grew || !last.streaming) {
         lastFingerprint = fingerprint;
-        const speakText = last.text.trim() || (last.ttsSource === "hud" ? "Understood, sir." : "");
+        const speakText = last.text.trim() || (last.ttsSource === "hud" ? "Understood." : "");
         if (!speakText) return;
         console.log("[App:TTS] streamSpeak id=%s len=%d grew=%s isFinal=%s streaming=%s", last.id, speakText.length, grew, !last.streaming, last.streaming);
         streamSpeak(last.id, speakText, !last.streaming);

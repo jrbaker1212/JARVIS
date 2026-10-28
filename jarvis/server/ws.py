@@ -177,7 +177,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                             # the new chat instead of cancelling.
                             await safe_send({
                                 "type": "info",
-                                "text": f"{busy} in progress — finish then I'll take the next one, sir.",
+                                "text": f"{busy} in progress — finish then I'll take the next one.",
                             })
                             continue
                         await cancel_running("new request")
@@ -230,7 +230,7 @@ async def _handle_command(send, line: str, orchestrator, memory, agents, cfg, ca
         orchestrator.reset()
         await send({
             "type": "assistant",
-            "text": "Clean Slate Protocol executed, sir. Conversation history purged.",
+            "text": "Clean slate. Conversation history cleared. Conversation history purged.",
         })
     elif cmd == "agents":
         rows = "\n".join(f"- **{a.name}** — {a.description}" for a in agents.list())
@@ -267,11 +267,11 @@ async def _handle_command(send, line: str, orchestrator, memory, agents, cfg, ca
                 await send({"type": "error", "text": f"image model selection failed: {e}"})
     elif cmd == "protocols":
         text = (
-            "**JARVIS protocols**\n"
-            "- Persona: concise British systems assistant; calm, dry, protective.\n"
+            "**NEXEY protocols**\n"
+            "- Persona: Nexy, lead operator of the Nexelyth Collective; direct, warm, protective.\n"
             f"- Model: `{cfg.model.provider}/{cfg.model.model}`.\n"
             f"- Tools: `{len(orchestrator.registry.all_tools())}` active under `{cfg.permissions.mode}` permissions.\n"
-            "- Voice: prefers British male voices, especially Ryan/George/Daniel-class voices.\n"
+            "- Voice: Collective voice pack (jarvis/core/voice_lines.py).\n"
             "- Safety: asks before destructive operations and refuses reckless commands."
         )
         await send({"type": "assistant", "text": text})

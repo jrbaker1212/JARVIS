@@ -218,7 +218,7 @@ export default function CommandBar() {
                 submit();
               }
             }}
-            placeholder={connected ? "Speak to JARVIS, sir." : "Reconnecting…"}
+            placeholder={connected ? "Speak to Nexy." : "Reconnecting…"}
             disabled={!connected}
             className="w-full bg-jarvis-glass border border-jarvis-cyan/15 focus:border-jarvis-cyan/55 outline-none pl-8 pr-10 py-[7px] rounded-xl text-jarvis-ice text-mono text-[13px] placeholder:text-jarvis-ice/30 backdrop-blur-md transition-all resize-none overflow-hidden leading-[1.45]"
           />

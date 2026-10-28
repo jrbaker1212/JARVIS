@@ -119,7 +119,7 @@ export default function Widget() {
             {micEnabled ? micStatus || "listening" : "tap mic to wake"}
           </div>
           <div className="text-[13px] text-jarvis-ice/90 truncate">
-            {lastReply ? lastReply.text.split(/[.!?\n]/)[0].slice(0, 60) || "standing by" : "standing by, sir."}
+            {lastReply ? lastReply.text.split(/[.!?\n]/)[0].slice(0, 60) || "standing by" : "standing by."}
           </div>
         </div>
       </div>
