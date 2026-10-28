@@ -31,7 +31,18 @@ export default function TopBar() {
               )}
             </div>
             <span className="text-display text-[13px] tracking-[0.35em] font-medium">
-              <span className="text-[#00e5ff]" style={{ textShadow: "0 0 12px rgba(0,229,255,0.65)" }}>JARVIS</span>
+              <span
+                style={{
+                  backgroundImage: "linear-gradient(135deg, #FF2E4D 0%, #D4AF37 50%, #2F8CFF 100%)",
+                  WebkitBackgroundClip: "text",
+                  backgroundClip: "text",
+                  color: "transparent",
+                  WebkitTextFillColor: "transparent",
+                  filter: "drop-shadow(0 0 8px rgba(212,175,55,0.45))",
+                }}
+              >
+                KORT
+              </span>
               <span className="text-[#22d3ee]" style={{ textShadow: "0 0 10px rgba(34,211,238,0.55)" }}>//HUD</span>
             </span>
             <span className="text-mono text-[10px] text-[#5ee9ff]/90 px-1.5 py-0.5 border border-[#00d4ff]/35 rounded-md">

@@ -43,14 +43,14 @@ export default function Orb() {
       <div className="mt-2 flex flex-col items-center gap-0.5 text-center">
         {caption ? (
           <span
-            className="font-sans text-sm tracking-wide text-[#5ee9ff]/90"
-            style={{ textShadow: "0 0 10px rgba(0,212,255,0.35)" }}
+            className="font-sans text-sm tracking-wide text-[#6CC6FF]/90"
+            style={{ textShadow: "0 0 10px rgba(47,140,255,0.35)" }}
           >
             {caption}
           </span>
         ) : null}
         <span className="font-mono text-[9px] tracking-[0.4em] text-[#475569]/90 uppercase">
-          JARVIS
+          KORT
         </span>
       </div>
     </div>
