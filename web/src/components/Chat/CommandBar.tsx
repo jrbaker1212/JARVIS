@@ -180,7 +180,7 @@ export default function CommandBar() {
         {/* Speaker */}
         <button
           onClick={() => setVoiceEnabled(!voiceEnabled)}
-          title={voiceEnabled ? `Mute JARVIS (${voiceProfile?.name ?? "…"})` : `Unmute JARVIS (${voiceProfile?.name ?? "…"})`}
+          title={voiceEnabled ? `Mute Nexy (${voiceProfile?.name ?? "…"})` : `Unmute Nexy (${voiceProfile?.name ?? "…"})`}
           className={`w-9 h-9 flex items-center justify-center rounded-xl border transition-all shrink-0 ${
             voiceEnabled
               ? "border-jarvis-cyan/45 text-jarvis-cyan bg-jarvis-cyan/10"

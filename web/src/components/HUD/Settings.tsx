@@ -79,7 +79,7 @@ export default function Settings({
             Status: {convaiConnected ? "connected" : "offline"} {micStatus ? `· ${micStatus}` : ""}
           </div>
           <Toggle
-            label="JARVIS speaks aloud (TTS) — always on after relaunch"
+            label="Nexy speaks aloud (TTS) — always on after relaunch"
             value={voiceEnabled}
             onChange={(v) => {
               setVoiceEnabled(v);
@@ -94,7 +94,7 @@ export default function Settings({
             onChange={(v) => { if (v) { void armMic(); } else { disarmMic(); } }}
           />
           <Toggle
-            label="Say “cancel” to stop JARVIS speaking"
+            label="Say “cancel” to stop Nexy speaking"
             value={bargeIn}
             onChange={setBargeIn}
           />

@@ -45,7 +45,7 @@ export default function TopBar() {
               </span>
               <span className="text-[#6CC6FF]" style={{ textShadow: "0 0 10px rgba(108,198,255,0.55)" }}>//HUD</span>
             </span>
-            <span className="text-mono text-[10px] text-[#6CC6FF]/90 px-1.5 py-0.5 border border-[#00d4ff]/35 rounded-md">
+            <span className="text-mono text-[10px] text-[#6CC6FF]/90 px-1.5 py-0.5 border border-[#2F8CFF]/35 rounded-md">
               LOCAL
             </span>
           </div>

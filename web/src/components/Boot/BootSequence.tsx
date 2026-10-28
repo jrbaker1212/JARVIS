@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "../../lib/store";
 
 const LINES = [
-  "INITIALISING NEXEY KERNEL ...",
+  "INITIALISING KORT KERNEL ...",
   "LINKING NATURAL-LANGUAGE CORE ...",
   "TUNING COLLECTIVE VOICE ...",
   "ESTABLISHING SECURE LOCAL UPLINK ...",

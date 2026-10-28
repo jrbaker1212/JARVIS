@@ -9,7 +9,7 @@
  *   2. Latest media card (image, search, video, etc.) preview
  *   3. Mini command bar with voice toggle
  *
- * Designed to feel premium: frosted glass card, soft cyan accent, large
+ * Designed to feel premium: frosted glass card, soft neon-blue accent, large
  * typography, no dense HUD chrome. Closes / shrinks via the chevron in
  * the header which IPCs back to "full" mode.
  */
@@ -84,7 +84,7 @@ export default function Widget() {
       <div className="h-9 flex items-center justify-between px-3 select-none border-b border-jarvis-cyan/10 app-drag">
         <div className="flex items-center gap-2 text-[10px] tracking-[0.45em] uppercase opacity-70">
           <span className="w-1.5 h-1.5 rounded-full bg-jarvis-cyan animate-pulse" />
-          J · A · R · V · I · S
+          K · O · R · T
         </div>
         <div className="flex items-center gap-1 app-no-drag">
           <button
@@ -174,7 +174,7 @@ export default function Widget() {
               }
             }}
             rows={1}
-            placeholder="Ask JARVIS…"
+            placeholder="Ask Nexy…"
             className="flex-1 bg-transparent resize-none outline-none text-[14px] leading-snug py-2 text-jarvis-ice placeholder:text-jarvis-cyan/30"
           />
           <button

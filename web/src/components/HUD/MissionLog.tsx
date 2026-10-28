@@ -22,7 +22,7 @@ export default function MissionLog() {
       });
     }
     for (const c of chat.slice(-3)) {
-      if (c.role === "assistant") events.push({ id: `c-${c.id}`, ts: c.ts, sev: "aqua", label: "JARVIS", detail: c.text.slice(0, 56) });
+      if (c.role === "assistant") events.push({ id: `c-${c.id}`, ts: c.ts, sev: "aqua", label: "NEXY", detail: c.text.slice(0, 56) });
       else if (c.role === "user")  events.push({ id: `c-${c.id}`, ts: c.ts, sev: "cyan", label: "USER",   detail: c.text.slice(0, 56) });
     }
     events.sort((a, b) => b.ts - a.ts);
